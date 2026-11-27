@@ -850,7 +850,7 @@
           </div>
           <div class="flex flex-wrap gap-2">
             <button type="button" onclick="AD.exportPdf()" class="rounded-xl bg-foretFonce text-white font-titre text-sm px-4 py-2.5 cursor-pointer">💾 Enregistrer (PDF)</button>
-            <button type="button" onclick="AD.exportJson()" class="rounded-xl border border-orCercle bg-amber-50 text-anthracite font-titre text-sm px-4 py-2.5 cursor-pointer">📥 Sauvegarde (fichier)</button>
+            <button type="button" onclick="AD.exportJson()" class="rounded-xl border border-orCercle bg-amber-50 text-anthracite font-titre text-sm px-4 py-2.5 cursor-pointer">🛟 Copie de sécurité (fichier)</button>
             <label class="rounded-xl border border-slate-300 bg-slate-50 text-anthracite font-titre text-sm px-4 py-2.5 cursor-pointer">📂 Restaurer<input type="file" accept=".json,application/json" class="hidden" onchange="AD.restaurer(this)" /></label>
           </div>
           <p id="admin-status" class="text-sm"></p>
@@ -1257,6 +1257,7 @@
       appliquerLogoIcones();
       try {
         if ('serviceWorker' in navigator && /^https?:$/.test(window.location.protocol)) {
+          (() => { const avait = !!navigator.serviceWorker.controller; navigator.serviceWorker.addEventListener('controllerchange', () => { if (avait && !window.__rl) { window.__rl = 1; location.reload(); } }); })();
           navigator.serviceWorker.register('sw.js').catch((err) => console.warn('Service worker ignoré :', err));
         }
       } catch (err) {
@@ -3299,7 +3300,8 @@
         g.fillStyle = '#fff'; g.fillRect(0, 0, 1000, 1230); g.strokeStyle = '#1B5E20'; g.lineWidth = 6; rr(g, 20, 20, 960, 1190, 26); g.stroke();
         if (L) { g.save(); g.beginPath(); g.arc(135, 135, 75, 0, 7); g.clip(); g.drawImage(L, 60, 60, 150, 150); g.restore(); g.strokeStyle = '#D4AF37'; g.lineWidth = 4; g.beginPath(); g.arc(135, 135, 75, 0, 7); g.stroke(); }
         const T = (s, x, y, f, col, al) => { g.font = f; g.fillStyle = col; g.textAlign = al || 'left'; g.fillText(s, x, y); };
-        T('FEDDE KAWRAL COMMUNE DE SAGNÉ (F.K.C.S.)', 235, 100, 'bold 24px Arial', '#1B5E20'); T('REÇU DE RÈGLEMENT / ACOMPTE / SOLDE', 235, 148, 'bold 36px Arial', '#1B5E20');
+        const FT = (t, x, y, px, col, w) => { let p = px; g.font = 'bold ' + p + 'px Arial'; while (g.measureText(t).width > w && p > 14) { p--; g.font = 'bold ' + p + 'px Arial'; } T(t, x, y, 'bold ' + p + 'px Arial', col); };
+        FT('FEDDE KAWRAL COMMUNE DE SAGNÉ (F.K.C.S.)', 235, 100, 24, '#1B5E20', 715); FT('REÇU DE RÈGLEMENT / ACOMPTE / SOLDE', 235, 148, 36, '#1B5E20', 715);
         T('Grande Journée Culturelle — Samedi 23 janvier 2027', 235, 186, '22px Arial', '#475569'); T('Espace des Habitants, Les Mureaux', 235, 214, '22px Arial', '#475569');
         g.fillStyle = '#FFF8E1'; g.strokeStyle = '#D4AF37'; g.lineWidth = 3; rr(g, 50, 250, 900, 80, 14); g.fill(); g.stroke();
         T('Reçu N° ' + rd.numero, 75, 300, 'bold 26px Arial', '#7B3F00'); T('Date : ' + rd.date + '   •   Mode : ' + rd.mode, 925, 300, 'bold 24px Arial', '#1F2924', 'right');
@@ -3309,7 +3311,7 @@
         g.fillStyle = '#FFF4D6'; g.strokeStyle = '#E0A800'; g.lineWidth = 4; rr(g, 50, 685, 900, 110, 16); g.fill(); g.stroke();
         g.font = 'bold 26px Arial'; wrapT(g, c.m, 840).slice(0, 2).forEach((s, i, a) => T(s, 500, 740 + (i - (a.length - 1) / 2) * 34, 'bold 26px Arial', '#5A2D00', 'center'));
         if (rd.obs) { g.font = '24px Arial'; wrapT(g, 'Observation : ' + rd.obs, 900).slice(0, 3).forEach((s, i) => T(s, 55, 850 + i * 32, '24px Arial', '#1F2924')); }
-        const sg = (x, l, s) => { g.strokeStyle = '#CBD5E1'; g.lineWidth = 2; rr(g, x, 965, 435, 200, 14); g.stroke(); T(l, x + 18, 1000, 'bold 18px Arial', '#1B5E20'); T(s, x + 18, 1140, 'italic 20px Arial', '#64748B'); };
+        const sg = (x, l, s) => { g.strokeStyle = '#CBD5E1'; g.lineWidth = 2; rr(g, x, 965, 435, 200, 14); g.stroke(); g.font = 'bold 18px Arial'; wrapT(g, l, 395).slice(0, 2).forEach((t, i) => T(t, x + 18, 1000 + i * 24, 'bold 18px Arial', '#1B5E20')); T(s, x + 18, 1140, 'italic 20px Arial', '#64748B'); };
         sg(50, 'SIGNATURE DU BÉNÉFICIAIRE / PRESTATAIRE', 'Lu et approuvé — Date et signature'); sg(515, 'SIGNATURE DU RESPONSABLE F.K.C.S. / TRÉSORIER', 'Cachet et signature officielle F.K.C.S.');
         return cv;
       }
@@ -3361,7 +3363,7 @@
           ...(D.notes ? [{ h: 'Bloc-notes de séance', lines: D.notes.split('\n') }] : [])];
       }
       const exportPdf = async () => { afficherToast('Préparation du PDF…'); await sortie('pdf', 'FKCS-tableau-de-bord', 'Tableau de bord F.K.C.S.', 'Grande Journée Culturelle — 23 janvier 2027 — édité le ' + new Date().toLocaleDateString('fr-FR'), blocsTout()); };
-      function exportJson() { dl(new Blob([JSON.stringify(D, null, 1)], { type: 'application/json' }), 'fkcs-admin-sauvegarde.json'); }
+      function exportJson() { dl(new Blob([JSON.stringify(D, null, 1)], { type: 'application/json;charset=utf-8' }), 'fkcs-admin-sauvegarde.json'); }
       function restaurer(inp) {
         const f = inp.files && inp.files[0]; if (!f) return;
         f.text().then((t) => { const o = JSON.parse(t); if (!o || !Array.isArray(o.finances)) throw 0; D = o; migrer(); merge(); save(); render(); afficherToast('Sauvegarde restaurée.'); }).catch(() => afficherToast('Fichier de sauvegarde invalide.', 'error')); inp.value = '';
@@ -3439,13 +3441,18 @@
       function vCR() {
         const c = (crId && find('comptes', crId)) || { date: today(), lieu: '', titre: '', texte: '' };
         const b = (id, k, l, cl) => `<button type="button" onclick="AD.crOut('${id}','${k}')" class="rounded-xl border px-3 py-2 text-sm font-bold cursor-pointer ${cl}">${l}</button>`;
-        return ban('🗒️', 'Comptes rendus de réunion', 'Rédigez ou collez le texte, enregistrez-le, puis téléchargez-le en PDF / JPG ou envoyez-le par WhatsApp', `<div class="flex gap-2"><button type="button" onclick="AD.exportJson()" class="rounded-xl bg-white/90 text-anthracite text-sm font-bold px-3 py-2 cursor-pointer">💾 Sauvegarder (fichier)</button><label class="rounded-xl bg-white/90 text-anthracite text-sm font-bold px-3 py-2 cursor-pointer">📂 Restaurer<input type="file" accept=".json,application/json" class="hidden" onchange="AD.restaurer(this)" /></label></div>`)
-          + card(`<div class="grid grid-cols-2 gap-3">${lab('Date', `<input id="cr-d" type="date" value="${E(c.date)}" class="${IN}" />`)}${lab('Lieu', `<input id="cr-l" type="text" value="${E(c.lieu)}" class="${IN}" />`)}</div><div class="mt-3">${lab('Titre *', `<input id="cr-t" type="text" value="${E(c.titre)}" placeholder="Réunion de bureau du 21 novembre 2026" class="${IN}" />`)}</div><div class="mt-3">${lab('Texte du compte rendu — collez ici votre texte déjà écrit', `<textarea id="cr-x" rows="14" class="${IN} font-normal">${E(c.texte)}</textarea>`)}</div><div class="flex gap-2 mt-3"><button type="button" onclick="AD.crSave()" class="btn-valider rounded-xl px-6 py-3 font-titre text-base cursor-pointer">✅ Enregistrer le compte rendu</button>${crId ? `<button type="button" onclick="AD.crEdit(null)" class="rounded-xl border border-slate-300 px-4 py-3 text-sm font-bold cursor-pointer">Annuler</button>` : ''}</div>`)
+        return ban('🗒️', 'Comptes rendus de réunion', 'Collez le texte, puis téléchargez-le en PDF ou en JPG (avec le logo) ou envoyez-le par WhatsApp', `<div class="flex gap-2"><button type="button" onclick="AD.exportPdf()" class="rounded-xl bg-white/90 text-anthracite text-sm font-bold px-3 py-2 cursor-pointer">💾 Sauvegarder (PDF)</button><label class="rounded-xl bg-white/90 text-anthracite text-sm font-bold px-3 py-2 cursor-pointer">📂 Restaurer<input type="file" accept=".json,application/json" class="hidden" onchange="AD.restaurer(this)" /></label></div>`)
+          + card(`<div class="grid grid-cols-2 gap-3">${lab('Date', `<input id="cr-d" type="date" value="${E(c.date)}" class="${IN}" />`)}${lab('Lieu', `<input id="cr-l" type="text" value="${E(c.lieu)}" class="${IN}" />`)}</div><div class="mt-3">${lab('Titre (facultatif)', `<input id="cr-t" type="text" value="${E(c.titre)}" placeholder="Réunion de bureau du 21 novembre 2026" class="${IN}" />`)}</div><div class="mt-3">${lab('Texte du compte rendu — collez ici votre texte déjà écrit', `<textarea id="cr-x" rows="14" class="${IN} font-normal">${E(c.texte)}</textarea>`)}</div><div class="flex flex-wrap gap-2 mt-3"><button type="button" onclick="AD.crSave()" class="btn-valider rounded-xl px-6 py-3 font-titre text-base cursor-pointer">✅ Enregistrer le compte rendu</button></div><div class="flex flex-wrap gap-2 mt-3"><button type="button" onclick="AD.crFormOut('pdf')" class="rounded-xl border-2 border-orCercle bg-amber-50 px-4 py-3 font-titre text-sm cursor-pointer">📄 Télécharger en PDF</button><button type="button" onclick="AD.crFormOut('jpg')" class="rounded-xl border-2 border-orCercle bg-amber-50 px-4 py-3 font-titre text-sm cursor-pointer">🖼️ Télécharger en JPG</button><button type="button" onclick="AD.crFormOut('wa')" class="rounded-xl border-2 border-emerald-400 bg-emerald-50 px-4 py-3 font-titre text-sm cursor-pointer">💬 WhatsApp</button>${crId ? `<button type="button" onclick="AD.crEdit(null)" class="rounded-xl border border-slate-300 px-4 py-3 text-sm font-bold cursor-pointer">Annuler</button>` : ''}</div>`)
           + (D.comptes.length ? card(D.comptes.map((x) => `<div class="py-4 border-b border-slate-100 last:border-0"><div class="font-titre text-lg text-foret">${E(x.titre)}</div><div class="text-sm text-slate-600 mb-2">${E(dfr(x.date))}${x.lieu ? ' — ' + E(x.lieu) : ''}</div><div class="flex flex-wrap gap-2">${b(x.id, 'edit', '✏️ Modifier', 'bg-emerald-50 border-emerald-300')}${b(x.id, 'pdf', '📄 PDF', 'bg-amber-50 border-amber-300')}${b(x.id, 'jpg', '🖼️ JPG', 'bg-amber-50 border-amber-300')}${b(x.id, 'share', '📤 Partager PDF', 'bg-emerald-50 border-emerald-300')}${b(x.id, 'wa', '💬 WhatsApp', 'bg-emerald-50 border-emerald-300')}${trash('comptes', x.id)}</div></div>`).join('')) : '');
       }
+      function crForm() {
+        const v = (i) => document.getElementById(i).value, d = v('cr-d') || today(), x = v('cr-x');
+        if (!x.trim() && !v('cr-t').trim()) { afficherToast('Écrivez ou collez le texte du compte rendu.', 'error'); return null; }
+        return { date: d, lieu: v('cr-l').trim(), titre: v('cr-t').trim() || ('Compte rendu du ' + dfr(d)), texte: x };
+      }
+      async function crFormOut(k) { const o = crForm(); if (!o) return; if (k !== 'wa') afficherToast('Préparation du fichier…'); await sortie(k, 'Compte-rendu-' + o.date, o.titre, dfr(o.date) + (o.lieu ? ' — ' + o.lieu : ''), [{ h: '', lines: o.texte.split('\n') }]); }
       function crSave() {
-        const v = (i) => document.getElementById(i).value, t = v('cr-t').trim(); if (!t) { afficherToast('Le titre est obligatoire.', 'error'); return; }
-        const o = { date: v('cr-d'), lieu: v('cr-l').trim(), titre: t, texte: v('cr-x') };
+        const o = crForm(); if (!o) return;
         if (crId && find('comptes', crId)) Object.assign(find('comptes', crId), o); else D.comptes.unshift({ id: uid(), ...o });
         crId = null; save(); render(); afficherToast('Compte rendu enregistré.');
       }
@@ -3470,12 +3477,13 @@
         document.getElementById('admin-kpi').innerHTML = kpi();
         box.innerHTML = VUES[sub][2]();
       }
-      return { init, refresh, reset, upd, ced, tog, add, del, recu, rset, ract, completer, ffin, qfin, exportPdf, exportJson, restaurer, pAdd, pcat, qpres, csv, copier, fi, qinv, togAdd, cyc, ajouterInv, crSave, crEdit, crOut, note, vue };
+      return { init, refresh, reset, upd, ced, tog, add, del, recu, rset, ract, completer, ffin, qfin, exportPdf, exportJson, restaurer, pAdd, pcat, qpres, csv, copier, fi, qinv, togAdd, cyc, ajouterInv, crSave, crFormOut, crEdit, crOut, note, vue };
     })();
 
     /* Branchement sur l'application existante */
     (() => {
-      const _co = changerOnglet, _rf = rafraichirInterfaceComplete, _dec = deconnecterUtilisateur;
+      const _co = changerOnglet, _rf = rafraichirInterfaceComplete, _dec = deconnecterUtilisateur, _oac = ouvrirApplicationConnectee;
+      const majBtn = () => { const b = document.getElementById('tab-btn-admin'); if (b) b.classList.toggle('hidden', !(currentUser && currentUser.role === 'ADMIN')); };
       const CLS = 'tab-btn px-4 py-2.5 rounded-xl font-titre text-xs sm:text-sm cursor-pointer ';
       const OFF = 'bg-white text-anthracite border border-slate-200 hover:bg-creme', ON = 'bg-foret text-white shadow';
       changerOnglet = function (t) {
@@ -3492,7 +3500,8 @@
         if (ba) ba.className = CLS + (activeTab === 'admin' ? ON : OFF) + (adm ? '' : ' hidden');
         ['vendeurs', 'invites'].forEach((k) => { const b = document.getElementById('tab-btn-' + k); if (b) b.classList.toggle('hidden', !adm); });
       };
-      rafraichirInterfaceComplete = function () { _rf(); if (activeTab === 'admin') AD.refresh(); };
+      ouvrirApplicationConnectee = function () { _oac(); majBtn(); };
+      rafraichirInterfaceComplete = function () { _rf(); majBtn(); if (activeTab === 'admin') AD.refresh(); };
       deconnecterUtilisateur = function () { AD.reset(); activeTab = 'billetterie'; _dec(); };
     })();
   </script>
