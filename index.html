@@ -117,10 +117,9 @@
         break-inside: avoid;
       }
     }
-      @media print {
-      body.print-recu header, body.print-recu main, body.print-recu footer, body.print-recu #session-bar, body.print-recu #toast-container { display: none !important; }
-      body.print-recu #recu-modal { position: static !important; background: #fff !important; display: block !important; padding: 0 !important; }
-    }
+      .ce { outline: none; display: inline; word-break: break-word; }
+    .ce:empty:before { content: attr(data-ph); color: #94a3b8; font-weight: 400; }
+    .ce:focus { background: #FFFBEB; border-radius: 6px; box-shadow: 0 0 0 2px #D4AF37; }
   </style>
 </head>
 <body class="min-h-screen flex flex-col bg-creme text-anthracite">
@@ -839,18 +838,25 @@
     </section>
 
     <!-- ONGLET ADMIN : réservé au rôle ADMIN -->
-      <div id="tab-admin" class="hidden space-y-5 no-print">
-        <div class="bg-white rounded-2xl border-2 border-orCercle/60 shadow-sm p-4 sm:p-5 space-y-3">
-          <div class="flex flex-wrap items-start justify-between gap-2">
-            <div>
-              <span class="text-xs font-titre uppercase tracking-wider text-orFonce">Espace Administrateur</span>
-              <h2 class="text-lg font-titre text-anthracite">Finances, présence, logistique &amp; réunion</h2>
+      <div id="tab-admin" class="hidden space-y-4 no-print">
+        <div class="bg-white rounded-2xl border-2 border-orCercle/70 shadow-sm p-4 sm:p-5 space-y-3">
+          <div class="flex items-center gap-3">
+            <img id="ad-logo" alt="Logo F.K.C.S." class="w-16 h-16 sm:w-20 sm:h-20 rounded-full object-cover border-2 border-orCercle bg-white shrink-0" />
+            <div class="min-w-0">
+              <span class="inline-block px-2.5 py-0.5 mb-1 rounded-full text-[11px] font-bold bg-amber-50 border border-amber-300 text-orFonce">📅 RÉUNION DU SAMEDI 21 NOVEMBRE 2026</span>
+              <h2 class="font-titre text-lg sm:text-2xl text-foret leading-tight">FEDDE KAWRAL COMMUNE DE SAGNÉ (F.K.C.S.)</h2>
+              <p class="text-sm text-slate-600">Grande Journée Culturelle — <b class="text-red-700">Samedi 23 Janvier 2027</b> • Espace des Habitants, Les Mureaux</p>
             </div>
-            <button type="button" onclick="AD.exportJson()" class="px-3 py-2 rounded-xl bg-orCercle text-anthracite font-titre text-xs font-bold cursor-pointer">Sauvegarde (fichier)</button>
           </div>
-          <p id="admin-status" class="text-xs"></p>
-          <div id="admin-nav" class="flex flex-wrap gap-2"></div>
+          <div class="flex flex-wrap gap-2">
+            <button type="button" onclick="AD.exportPdf()" class="rounded-xl bg-foretFonce text-white font-titre text-sm px-4 py-2.5 cursor-pointer">💾 Enregistrer (PDF)</button>
+            <button type="button" onclick="AD.exportJson()" class="rounded-xl border border-orCercle bg-amber-50 text-anthracite font-titre text-sm px-4 py-2.5 cursor-pointer">📥 Sauvegarde (fichier)</button>
+            <label class="rounded-xl border border-slate-300 bg-slate-50 text-anthracite font-titre text-sm px-4 py-2.5 cursor-pointer">📂 Restaurer<input type="file" accept=".json,application/json" class="hidden" onchange="AD.restaurer(this)" /></label>
+          </div>
+          <p id="admin-status" class="text-sm"></p>
+          <div id="admin-nav" class="flex gap-2 overflow-x-auto pb-1"></div>
         </div>
+        <div id="admin-kpi"></div>
         <div id="admin-content" class="space-y-4"></div>
       </div>
     <!-- Modale d'édition d'une entrée (réservée à l'administrateur Kaw LY) -->
@@ -905,15 +911,6 @@
 
   </main>
 
-  <div id="recu-modal" class="hidden fixed inset-0 z-50 bg-black/50 overflow-y-auto p-3">
-    <div class="max-w-xl mx-auto bg-white rounded-2xl p-4 space-y-3">
-      <div id="recu-body"></div>
-      <div class="flex justify-end gap-2 no-print">
-        <button type="button" onclick="AD.imprimerRecu()" class="btn-valider rounded-xl px-4 py-2 font-titre text-xs cursor-pointer">Imprimer / PDF</button>
-        <button type="button" onclick="AD.fermerRecu()" class="px-4 py-2 rounded-xl border border-slate-300 text-xs font-semibold cursor-pointer">Fermer</button>
-      </div>
-    </div>
-  </div>
   <!-- Pied de page discret avec coordonnées officielles -->
   <footer class="bg-white border-t border-slate-200 py-4 px-4 text-center text-xs text-anthracite/75 mt-8">
     <div class="max-w-5xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
@@ -3080,68 +3077,62 @@
       }
     });
       /* ======================================================================
-     * ESPACE ADMIN (réservé au rôle ADMIN) : finances, présence, logistique,
-     * invitations, commissions, programme, bloc-notes
+     * ESPACE ADMIN (rôle ADMIN) — tableau de bord de la réunion
      * ====================================================================== */
     const AD = (() => {
       const KEY = 'fkcs_admin_v1';
-      let D = null, sub = 'finances', timer = null, loaded = false, armed = '', mode = 'local', code = '', filtre = '';
+      const G9 = "Lettres générées en attente d'envoi (À valider avant ou pendant la réunion)";
+      const N9 = ['Association Jeunesse de Sagné','Association Lobaly','Association Lougere','Association Lumière pour Tous','Association Ressortissants de Sagné Lobaly','Association Solidarité Waly','Les Mamans de la Commune de Sagné',"Comité de Jumelage d'Arles",'Association Sadél'];
+      let D = null, sub = 'finances', timer = null, rt = null, loaded = false, armed = '', mode = 'local', code = '', rd = null, crId = null, addOpen = false;
+      const F = { fq: '', ff: 'tous', iq: '', ifl: 'tous', pq: '', pc: 'tous' };
       const uid = () => 'a' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
       const E = (s) => echapperHTML(s);
       const eur = (n) => (Number(n) || 0).toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + ' €';
+      const today = () => new Date().toISOString().slice(0, 10);
+      const dfr = (s) => { try { return new Date(s + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }); } catch (e) { return s || ''; } };
       const STOP = new Set(['de','du','des','la','le','les','d','l','et','m','mme','mr','monsieur','madame','association','assoc']);
       const cle = (n) => normaliserCle(String(n || '').replace(/\(.*?\)/g, ' ')).replace(/[^a-z0-9 ]/g, ' ').split(' ').filter((w) => w && !STOP.has(w)).sort().join(' ');
-      const IN = 'w-full rounded-lg border border-slate-300 focus:border-foret focus:outline-none bg-white px-2.5 py-2 text-sm';
-      const BT = 'px-3 py-1.5 rounded-lg text-xs font-bold cursor-pointer';
-      const CARD = 'bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-3';
-      const LBL = 'block text-[11px] font-bold text-anthracite/70 mb-0.5';
+      const LOGO = () => { const i = document.querySelector('img[src^="data:image"]'); return i ? i.src : ''; };
+      const IN = 'w-full rounded-xl border border-slate-300 focus:border-foret focus:outline-none bg-white px-3 py-2.5 text-base font-semibold text-anthracite';
+      const LB = 'block text-xs font-titre uppercase tracking-wide text-slate-600 mb-1';
+      const CH = 'px-4 py-2 rounded-xl border text-sm font-bold cursor-pointer whitespace-nowrap';
 
+      /* ---------- Données de départ ---------- */
       function seed() {
         const M = (a, f) => a.map((r) => ({ id: uid(), ...f(r) }));
         const S = 'envoye', W = 'attente', V = 'Validé', C = 'En cours';
         const inv = (g, a) => M(a, ([nom, detail, statut]) => ({ nom, detail, groupe: g, statut }));
-        const AS = 'Associations & Partenaires', MA = 'Marraines & Déplacements Communautaires', HO = "Invité d'Honneur & GRDR (envoyés par e-mail le 17 nov. 2026)", PE = 'Personnalités & Invités Individuels', AU = 'Autorités, Institutions & Associations';
+        const MA = 'Marraines & Déplacements Communautaires', HO = "Invité d'Honneur & GRDR (Envoyés par e-mail le 17 nov. 2026)", PE = 'Personnalités & Invités Individuels', AU = 'Autorités, Institutions & Associations';
+        const LP = 'Lettre générée — prête à envoyer';
         return {
+          v: 2, comptes: [], notes: '', programme: [],
           finances: M([
-            ['Nappes papier en rouleau','Acompte','Espèces','2026-11-21',0,0,''],
-            ['Chemins de table / Rubans satin','Acompte','Espèces','2026-11-21',56.72,0,''],
-            ['4 Trophées cristal personnalisés','Acompte','Espèces','2026-11-21',99.24,0,''],
+            ['Nappes papier en rouleau','Acompte','Espèces','2026-11-21',0,0,''],['Chemins de table / Rubans satin','Acompte','Espèces','2026-11-21',56.72,0,''],['4 Trophées cristal personnalisés','Acompte','Espèces','2026-11-21',99.24,0,''],
             ['DJ (Animation Musicale)','Acompte','Virement','2026-11-18',700,100,'Acompte déjà versé — ajuster le montant total et le versement en euros'],
             ['Location nappes & matériel salle','Location','Espèces','2026-11-21',0,0,"Location nappes et équipements complémentaires pour l'Espace des Habitants"],
-            ['Samba Sabar','Cachet','Espèces','2026-11-21',0,0,'Artiste confirmé — suivi acompte / solde'],
-            ['Aliou Ba (Micro central)','Acompte','Espèces','2026-11-21',150,50,'Animation micro central — suivi financier'],
-            ['Hamadi Gawdel (Chanteur / Guitariste)','Cachet','Espèces','2026-11-21',0,0,'Prestation chant & guitare — suivi acompte / solde'],
-            ['Uniformes & écharpes garçons','Acompte','Virement','2026-11-21',360,0,'Achat / confection tenues et écharpes en cours'],
+            ['Samba Sabar','Cachet','Espèces','2026-11-21',0,0,'Artiste confirmé — suivi acompte / solde'],['Aliou Ba (Micro central)','Acompte','Espèces','2026-11-21',150,50,'Animation micro central — suivi financier'],
+            ['Hamadi Gawdel (Chanteur / Guitariste)','Cachet','Espèces','2026-11-21',0,0,'Prestation chant & guitare — suivi acompte / solde'],['Uniformes & écharpes garçons','Acompte','Virement','2026-11-21',360,0,'Achat / confection tenues et écharpes en cours'],
             ['Assurances salle & association','Achat','Virement','2026-11-21',0,360,'Assurances obligatoires salle et F.K.C.S. en cours']
           ], ([nom, type, mode, date, prix, verse, notes]) => ({ nom, type, mode, date, prix, verse, notes })),
-          presence: M([
-            ["M'baye Ibaye",'0746221394','Membre F.K.C.S.','15:17'],['Ousoumae Gassama','0758821766','Invité','16:40'],['Amadou Diarlé','0666533877','Membre F.K.C.S.','16:39'],['Diop Oumou','0745603343','Membre F.K.C.S.','14:15'],["M’baye Ibaye",'0746221394','Membre F.K.C.S.','15:17'],['Diye Ba','0641936571','Membre F.K.C.S.','16:07'],['Amadou Ba','0651997999','Membre F.K.C.S.','16:07'],['Ba mamadou','0767396990','Membre F.K.C.S.','16:03'],['Sira Samba Kane','0667672709','Membre F.K.C.S.','16:07'],['Abou Abdoulaye Ba','0669485916','Membre F.K.C.S.','15:50'],['Abou Dia','0669742170','Membre F.K.C.S.','15:30'],['Boubakar sy','0758754404','Membre F.K.C.S.','14:36'],['Ousoumane Coulibaly','0602200040','Membre F.K.C.S.','14:18'],['Amadou Ba','0780173850','Invité','13:50'],['Yaya Ndiaye','0780643196','Membre F.K.C.S.','13:50'],['Kalidou Ba','0749773083','Membre F.K.C.S.','13:50'],['Coulibaly Amadou','0618488894','Membre F.K.C.S.','12:51'],['Oumar Ly','0763669411','Membre F.K.C.S.','12:30'],['Elhousseine mbaye','0631037511','Membre F.K.C.S.','12:00']
-          ], ([nom, tel, cat, heure]) => ({ nom, tel, cat, heure, present: true })),
-          logistique: M([
-            ['Salle',"Validée auprès de la Mairie des Mureaux (Espace des Habitants)",C],['DJ','Acompte déjà versé',V],['Samba Sabar','Accepté de venir',V],['Aliou Ba','En charge du micro central',V],['Hamadi Gawdel','Chanteur et guitariste confirmé',V],['Uniformes et Écharpes (Garçons)','En cours de réalisation',C],['Assurances (salle et association)','En cours de réalisation',C],['Communication','Maquette publicitaire réalisée, en attente de validation finale',C],['Nouveau point logistique','Touchez ici pour préciser les détails...',C]
-          ], ([titre, detail, statut]) => ({ titre, detail, statut })),
+          presence: M([["M'baye Ibaye",'0746221394','Membre F.K.C.S.','15:17'],['Ousoumae Gassama','0758821766','Invité','16:40'],['Amadou Diarlé','0666533877','Membre F.K.C.S.','16:39'],['Diop Oumou','0745603343','Membre F.K.C.S.','14:15'],['M’baye Ibaye','0746221394','Membre F.K.C.S.','15:17'],['Diye Ba','0641936571','Membre F.K.C.S.','16:07'],['Amadou Ba','0651997999','Membre F.K.C.S.','16:07'],['Ba mamadou','0767396990','Membre F.K.C.S.','16:03'],['Sira Samba Kane','0667672709','Membre F.K.C.S.','16:07'],['Abou Abdoulaye Ba','0669485916','Membre F.K.C.S.','15:50'],['Abou Dia','0669742170','Membre F.K.C.S.','15:30'],['Boubakar sy','0758754404','Membre F.K.C.S.','14:36'],['Ousoumane Coulibaly','0602200040','Membre F.K.C.S.','14:18'],['Amadou Ba','0780173850','Invité','13:50'],['Yaya Ndiaye','0780643196','Membre F.K.C.S.','13:50'],['Kalidou Ba','0749773083','Membre F.K.C.S.','13:50'],['Coulibaly Amadou','0618488894','Membre F.K.C.S.','12:51'],['Oumar Ly','0763669411','Membre F.K.C.S.','12:30'],['Elhousseine mbaye','0631037511','Membre F.K.C.S.','12:00']], ([nom, tel, cat, heure]) => ({ nom, tel, cat, heure, present: true })),
+          logistique: M([['Salle','Validée auprès de la Mairie des Mureaux (Espace des Habitants)',C],['DJ','Acompte déjà versé',V],['Samba Sabar','Accepté de venir',V],['Aliou Ba','En charge du micro central',V],['Hamadi Gawdel','Chanteur et guitariste confirmé',V],['Uniformes et Écharpes (Garçons)','En cours de réalisation',C],['Assurances (salle et association)','En cours de réalisation',C],['Communication','Maquette publicitaire réalisée, en attente de validation finale',C],['Nouveau point logistique','Touchez ici pour préciser les détails...',C]], ([titre, detail, statut]) => ({ titre, detail, statut })),
           invitations: [].concat(
-            inv(AS, [["Association Jeunesse de Sagné",'Lettre générée — prête à envoyer',W],['Association Lobaly','Lettre générée — prête à envoyer',S],['Association Lougere','Lettre générée — prête à envoyer',S],['Association Lumière pour Tous','Lettre générée — prête à envoyer',W],['Association Ressortissants de Sagné Lobaly','Lettre générée — prête à envoyer',W],['Association Solidarité Waly','Lettre générée — prête à envoyer',W],['Les Mamans de la Commune de Sagné','Lettre générée — prête à envoyer',S],["Comité de Jumelage d'Arles",'Contacts : Bobo Mane / Mci Mane — prête à envoyer',W],['Association Sadél','Lettre générée — prête à envoyer',W]]),
-            inv(MA, [['Coumba Djouldé Sy','1ère Marraine — Mantes-la-Jolie — Lettre remise en main propre le 8 nov. 2026',S],['Maryam Sissoko','2ème Marraine — Maubeuge — Lettre remise en main propre le 14 nov. 2026',S],['Communauté de Belgique','Déplacement, réunion sur place et remise le 15 nov. 2026',S]]),
+            inv(G9, [[N9[0],LP,W],[N9[1],LP,S],[N9[2],LP,S],[N9[3],LP,W],[N9[4],LP,W],[N9[5],LP,W],[N9[6],LP,S],[N9[7],'Contacts : Bobo Mane / Mci Mane — prête à envoyer',W],[N9[8],LP,W]]),
+            inv(MA, [['1ère Marraine — Coumba Djouldé Sy','Mantes-la-Jolie — Lettre remise en main propre le 8 nov. 2026',S],['2ème Marraine — Maryam Sissoko','Maubeuge — Lettre remise en main propre le 14 nov. 2026',S],['Communauté de Belgique','Déplacement, réunion sur place et remise le 15 nov. 2026',S]]),
             inv(HO, [['Monsieur Amadou Danfa',"Invité d'honneur — Envoyé le 17 nov. 2026",S],['Madame Flora Ben Chekroun','GRDR — Envoyé le 17 nov. 2026',S],['Monsieur Jean-Marc Pradelle','Président du GRDR — Envoyé le 17 nov. 2026',S],['Monsieur Mamadou Djimera','CA du GRDR — Présence confirmée par e-mail',S],['Madame Dieynaba Sy','CA du GRDR — Envoyé le 17 nov. 2026',S],['Madame Michèle Quenardel','CA du GRDR — Envoyé le 17 nov. 2026',S]]),
             inv(PE, [['Ramata Alpha Ba','Invitation envoyée / remise',S],['Maryem Ousmane Traoré','Invitation envoyée / remise',S],['Aïssata Paté Diallo','Invitation envoyée / remise',S],['Oumou Mouhtar Malik Dia','Invitation envoyée / remise',S],['Oumou Dia','Lettre déjà envoyée',S],['Diye Mamadou Ba','Invitation envoyée / remise',S],['Dieynaba Sall','Invitation envoyée / remise',S],['Ablaye Tengele Ba',"Lettre d'invitation d'honneur remise",S],['Haby Demba Sy','Lettre remise',S],['Hawa Demba Ba','Lettre remise',S],['Coumba Kasse','Lettre remise',S],['Monsieur Mamoudou Mamadou Niang',"Ministre des Domaines, du Patrimoine de l'État et de la Réforme foncière",S]]),
             inv(AU, [['Consulat Général du Sénégal','Courrier officiel transmis',S],['Consulat Général de Mauritanie','Courrier officiel transmis',S],['M. Damien Vignier','Place de la Libération, 78130 Les Mureaux',S],['M. Adama Gaye','31 rue Léon Gambetta, 78200 Mantes-la-Jolie',S],['Madame Dieynaba Diop','47 rue Aristide-Briand, 78130 Les Mureaux',S],['Monsieur le Maire de Sagné','Lettre officielle transmise',S],['Association Padalal','Invitation officielle transmise',S]])),
-          commissions: M([
-            ['Commission Invitations & Courriers','Dye Banor, Mari Dabo, Kaw Ly','Rédaction, suivi, distribution des invitations et gestion des retours.'],
-            ['Commission Administrative & Relations Institutionnelles','Amadou Coulibaly, Kaw Ly, Aliou Dabo','Relations avec la mairie, les institutions et démarches administratives.'],
-            ['Commission Financement & Trésorier','Mbaye Housseni, Ousmane Barry','Élaboration et suivi du budget global, gestion de la trésorerie.'],
-            ['Commission Parrainage / VIP & Cuisine (Mamans)','Sira Kane, Deborewo Ba, Aminata Diop, Aïcha Sy','Organisation des repas, logistique cuisine et accueil privilégié VIP.'],
-            ['Commission Écharpes & Uniformes','Hamdou Ba, Hacim Banor','Choix, gestion, vente des écharpes et supervision des tenues des garçons.'],
-            ['Commission Jeunes Filles (Hôtesses & Décoration)','Aïcha Sy (Hôtesses) & Dieynaba Cissoko (Décoration)',"Accueil, placement des invités et aménagement de la salle."],
-            ['Régie Multimédia','Diari Ba, Abou Abdoulaye Ba','Gestion du diaporama, binôme micro central (Aliou Ba) et binôme DJ.'],
-            ['Commission Jeunes Garçons (Sécurité, Logistique & Installation)','Kalidou Ba, Amadou Ba',"Montage, aménagement de la salle, contrôle des accès et sécurité."],
-            ['Commission Communication','Aliou Dabo, Thiam Mamadou',"Conception et diffusion des supports publicitaires et promotion de l'événement."]
-          ], ([titre, resp, missions]) => ({ titre, resp, missions, statut: V })),
-          programme: [], notes: '', recuN: 0
+          commissions: M([['Commission Invitations & Courriers','Dye Banor, Mari Dabo, Kaw Ly','Rédaction, suivi, distribution des invitations et gestion des retours.'],['Commission Administrative & Relations Institutionnelles','Amadou Coulibaly, Kaw Ly, Aliou Dabo','Relations avec la mairie, les institutions et démarches administratives.'],['Commission Financement & Trésorier','Mbaye Housseni, Ousmane Barry','Élaboration et suivi du budget global, gestion de la trésorerie.'],['Commission Parrainage / VIP & Cuisine (Mamans)','Sira Kane, Deborewo Ba, Aminata Diop, Aïcha Sy','Organisation des repas, logistique cuisine et accueil privilégié VIP.'],['Commission Écharpes & Uniformes','Hamdou Ba, Hacim Banor','Choix, gestion, vente des écharpes et supervision des tenues des garçons.'],['Commission Jeunes Filles (Hôtesses & Décoration)','Aïcha Sy (Hôtesses) & Dieynaba Cissoko (Décoration)','Accueil, placement des invités et aménagement de la salle.'],['Régie Multimédia','Diari Ba, Abou Abdoulaye Ba','Gestion du diaporama, binôme micro central (Aliou Ba) et binôme DJ.'],['Commission Jeunes Garçons (Sécurité, Logistique & Installation)','Kalidou Ba, Amadou Ba','Montage, aménagement de la salle, contrôle des accès et sécurité.'],['Commission Communication','Aliou Dabo, Thiam Mamadou',"Conception et diffusion des supports publicitaires et promotion de l'événement."]], ([titre, resp, missions]) => ({ titre, resp, missions, statut: V }))
         };
       }
-
-      /* --- Fusion des noms de la billetterie (sans doublon) --- */
+      function migrer() {
+        D.comptes = D.comptes || []; D.notes = D.notes || ''; D.programme = D.programme || [];
+        if ((D.v || 1) < 2) {
+          const ks = new Set(N9.map(cle));
+          D.invitations.forEach((i) => { if (i.groupe === 'Associations & Partenaires' && ks.has(cle(i.nom))) i.groupe = G9; });
+          D.v = 2;
+        }
+      }
       function merge() {
         const have = new Set(D.invitations.map((i) => cle(i.nom)));
         let ch = false;
@@ -3152,7 +3143,7 @@
         return ch;
       }
 
-      /* --- Enregistrement : serveur (si autorisé) + copie sur l'appareil --- */
+      /* ---------- Enregistrement ---------- */
       function setMode(m, c) { mode = m; code = c || ''; statut(); }
       function save() {
         try { localStorage.setItem(KEY, JSON.stringify(D)); } catch (e) { /* ignoré */ }
@@ -3164,175 +3155,327 @@
         }, 500);
       }
       function statut() {
-        const el = document.getElementById('admin-status');
-        if (!el) return;
-        el.className = 'text-xs font-semibold ' + (mode === 'cloud' ? 'text-foret' : 'text-amber-800');
-        el.textContent = mode === 'cloud' ? '✅ Données enregistrées sur le serveur (visibles sur tous vos appareils).'
-          : '⚠️ Données enregistrées sur cet appareil seulement' + (code ? ' (serveur : ' + code + ')' : '') + '. Utilisez « Sauvegarde (fichier) » pour garder une copie.';
+        const el = document.getElementById('admin-status'); if (!el) return;
+        el.className = 'text-sm font-semibold ' + (mode === 'cloud' ? 'text-foret' : 'text-amber-800');
+        el.textContent = mode === 'cloud' ? '✅ Données enregistrées sur le serveur (visibles sur tous vos appareils).' : '⚠️ Données enregistrées sur cet appareil seulement' + (code ? ' (serveur : ' + code + ')' : '') + '.';
       }
       async function init() {
+        const lg = document.getElementById('ad-logo'); if (lg && !lg.src) lg.src = LOGO();
         if (loaded) { render(); return; }
         loaded = true;
         let local = null;
         try { local = JSON.parse(localStorage.getItem(KEY)); } catch (e) { /* ignoré */ }
         if (CLOUD && FB.ready) {
-          try {
-            const s = await FB.fs.getDoc(FB.fs.doc(FB.db, 'adminData', 'main'));
-            if (s.exists()) D = JSON.parse(s.data().json);
-            setMode('cloud');
-          } catch (e) { setMode('local', (e && e.code) || 'erreur'); }
+          try { const s = await FB.fs.getDoc(FB.fs.doc(FB.db, 'adminData', 'main')); if (s.exists()) D = JSON.parse(s.data().json); setMode('cloud'); }
+          catch (e) { setMode('local', (e && e.code) || 'erreur'); }
         }
         if (!D) D = local || seed();
-        merge(); save(); render();
+        migrer(); merge(); save(); render();
       }
-      function refresh() { if (D && merge()) save(); if (D) render(); }
-      function reset() { loaded = false; D = null; clearTimeout(timer); }
+      const editing = () => { const a = document.activeElement; return a && a.closest && a.closest('#admin-content') && /INPUT|TEXTAREA|SELECT/.test(a.tagName + (a.isContentEditable ? 'X' : '')) || (a && a.isContentEditable); };
+      function refresh() { if (D && merge()) { save(); if (!editing()) render(); } }
+      function reset() { loaded = false; D = null; rd = null; clearTimeout(timer); }
+      function later() { clearTimeout(rt); rt = setTimeout(render, 400); }
 
-      /* --- Edition générique --- */
-      function set(c, id, f, v, num) {
-        const o = D[c].find((x) => x.id === id);
-        if (!o) return;
-        o[f] = num ? (parseFloat(String(v).replace(',', '.')) || 0) : v;
-        save(); render();
-      }
-      function add(c, o) { D[c].push({ id: uid(), ...o }); save(); render(); }
+      /* ---------- Édition ---------- */
+      const find = (c, id) => D[c].find((x) => x.id === id);
+      function upd(c, id, f, v, num) { const o = find(c, id); if (!o) return; o[f] = num ? (parseFloat(String(v).replace(',', '.')) || 0) : v; save(); if (num || f === 'cat') later(); }
+      function ced(c, id, f, v) { const o = find(c, id); const t = String(v).replace(/\u00a0/g, ' ').trim(); if (o && o[f] !== t) { o[f] = t; save(); } }
+      function tog(c, id, f, v) { const o = find(c, id); if (o) { o[f] = v; save(); render(); } }
+      function add(c, o, top) { const x = { id: uid(), ...o }; if (top) D[c].unshift(x); else D[c].push(x); save(); render(); return x; }
       function del(c, id) {
         const k = c + id;
         if (armed !== k) { armed = k; render(); setTimeout(() => { if (armed === k) { armed = ''; render(); } }, 3500); return; }
         armed = ''; D[c] = D[c].filter((x) => x.id !== id); save(); render();
       }
-      const dBtn = (c, id) => `<button type="button" onclick="AD.del('${c}','${id}')" class="${BT} ${armed === c + id ? 'bg-red-600 text-white' : 'btn-non-valider'}">${armed === c + id ? 'Confirmer ?' : 'Supprimer'}</button>`;
-      const inp = (c, id, f, v, ph, t) => `<input type="${t || 'text'}" value="${E(v)}" placeholder="${E(ph || '')}" onchange="AD.set('${c}','${id}','${f}',this.value${t === 'number' ? ',1' : ''})" ${t === 'number' ? 'inputmode="decimal" step="0.01"' : ''} class="${IN}" />`;
-      const sel = (c, id, f, v, opts) => `<select onchange="AD.set('${c}','${id}','${f}',this.value)" class="${IN} font-semibold">${opts.map((o) => `<option ${o === v ? 'selected' : ''}>${E(o)}</option>`).join('')}</select>`;
-      const fld = (l, h) => `<div><label class="${LBL}">${l}</label>${h}</div>`;
-      const head = (t, s, btn) => `<div class="${CARD}"><div class="flex flex-wrap items-center justify-between gap-2"><div><h3 class="font-titre text-base text-foret">${t}</h3><p class="text-xs text-anthracite/70">${s}</p></div>${btn || ''}</div></div>`;
-      const addBtn = (c, o, l) => `<button type="button" onclick='AD.add("${c}",${E(JSON.stringify(o))})' class="btn-valider rounded-xl px-4 py-2 font-titre text-xs cursor-pointer">${l}</button>`;
-      const tog = (c, id, v, a, b) => `<button type="button" onclick="AD.set('${c}','${id}','statut','${v === a ? b : a}')" class="${BT} border-2 ${v === a ? 'bg-emerald-50 text-foret border-foret' : 'bg-amber-50 text-orFonce border-orCercle'}">${v} ${v === a ? '✅' : '⏳'}</button>`;
+      const ce = (c, id, f, v, cls, ph, multi) => `<span contenteditable="true" spellcheck="false" data-ph="${E(ph || 'Touchez pour écrire…')}" class="ce ${cls || ''}" ${multi ? '' : 'onkeydown="if(event.key===\'Enter\'){event.preventDefault();this.blur()}"'} onblur="AD.ced('${c}','${id}','${f}',this.innerText)">${E(v)}</span>`;
+      const inp = (c, id, f, v, t, ph) => `<input type="${t || 'text'}" value="${E(v)}" placeholder="${E(ph || '')}" ${t === 'number' ? 'inputmode="decimal" step="0.01"' : ''} onchange="AD.upd('${c}','${id}','${f}',this.value${t === 'number' ? ',1' : ''})" class="${IN}" />`;
+      const sel = (c, id, f, v, o) => `<select onchange="AD.upd('${c}','${id}','${f}',this.value)" class="${IN}">${o.map((x) => `<option ${x === v ? 'selected' : ''}>${E(x)}</option>`).join('')}</select>`;
+      const lab = (l, h) => `<div><label class="${LB}">${l}</label>${h}</div>`;
+      const trash = (c, id) => `<button type="button" onclick="AD.del('${c}','${id}')" class="shrink-0 rounded-xl px-2.5 py-2 text-lg cursor-pointer ${armed === c + id ? 'bg-red-600 text-white text-sm font-bold' : 'bg-slate-100'}">${armed === c + id ? 'Confirmer ?' : '🗑️'}</button>`;
+      const ban = (ic, t, s, b) => `<div class="rounded-2xl bg-foret text-white p-4 sm:p-5 border-2 border-foretFonce flex flex-wrap items-center justify-between gap-3"><div class="flex items-start gap-3 min-w-0"><span class="text-3xl">${ic}</span><div><h3 class="font-titre uppercase text-base sm:text-xl leading-snug">${t}</h3><p class="text-sm text-emerald-100 mt-1">${s}</p></div></div>${b || ''}</div>`;
+      const gold = (oc, l) => `<button type="button" onclick="${oc}" class="rounded-xl bg-orCercle text-anthracite font-titre font-bold text-sm px-4 py-3 cursor-pointer shadow">${l}</button>`;
+      const card = (h, c) => `<div class="bg-white rounded-2xl border border-amber-300 shadow-sm p-4 sm:p-5 ${c || ''}">${h}</div>`;
+      const chips = (cur, opts, fn) => opts.map(([k, l]) => `<button type="button" onclick="AD.${fn}('${k}')" class="${CH} ${cur === k ? 'bg-foret text-white border-foret' : 'bg-white text-anthracite border-amber-300'}">${l}</button>`).join('');
 
-      /* --- Finances --- */
-      const etat = (x) => { const p = +x.prix || 0, v = +x.verse || 0; return p > 0 && v >= p ? ['Soldé / Complet ✅', 'bg-emerald-100 text-foret border-foret'] : v > 0 ? ['Acompte versé / Partiel ⏳', 'bg-amber-100 text-orFonce border-orCercle'] : ['Non payé', 'bg-red-50 text-red-800 border-red-300']; };
+      /* ---------- Indicateurs ---------- */
+      function kpi() {
+        const f = D.finances, v = f.reduce((s, x) => s + (+x.verse || 0), 0), r = f.reduce((s, x) => s + Math.max(0, (+x.prix || 0) - (+x.verse || 0)), 0), c = (s) => D.invitations.filter((i) => i.statut === s).length;
+        const k = (t, val, s, col, ic) => `<div class="rounded-2xl border-2 ${col} bg-white p-4 flex items-center justify-between gap-2"><div><div class="text-xs font-titre uppercase tracking-wide text-slate-600">${t}</div><div class="text-3xl font-titre mt-1">${val}</div><div class="text-sm mt-1">${s}</div></div><div class="text-3xl">${ic}</div></div>`;
+        return `<div class="grid grid-cols-2 gap-3">${k('Total déjà versé', eur(v), 'Acomptes &amp; règlements', 'border-amber-300 text-foret', '💶')}${k('Reste à payer', eur(r), 'Solde restant engagé', 'border-red-200 text-red-700', '⚖️')}${k('Lettres envoyées', c('envoye'), 'Présents : ' + D.presence.filter((p) => p.present).length, 'border-emerald-300 text-foret', '✅')}${k('Lettres en attente', c('attente'), 'À modifier / en cours : ' + (c('modifier') + D.logistique.filter((l) => l.statut !== 'Validé').length), 'border-amber-300 text-orange-600', '⏳')}</div>`;
+      }
+
+      /* ---------- Finances ---------- */
+      const etatK = (x) => { const p = +x.prix || 0, v = +x.verse || 0; return p > 0 && v >= p ? 'solde' : v > 0 ? 'partiel' : 'non'; };
+      const ETAT = { solde: ['Soldé / Complet ✅', 'bg-emerald-100 text-foret border-foret'], partiel: ['Acompte versé / Partiel ⏳', 'bg-amber-100 text-orFonce border-orCercle'], non: ['Non payé', 'bg-red-50 text-red-800 border-red-300'] };
+      function rowFin(x) {
+        const e = ETAT[etatK(x)], r = Math.max(0, (+x.prix || 0) - (+x.verse || 0));
+        return `<div class="py-5 border-b border-amber-200 last:border-0 space-y-3">
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3"><div class="col-span-2">${lab('Bénéficiaire / prestataire / article', inp('finances', x.id, 'nom', x.nom))}</div>${lab("Type d'opération", sel('finances', x.id, 'type', x.type, ['Acompte', 'Solde', 'Achat', 'Location', 'Cachet', 'Autre']))}${lab('Mode paiement', sel('finances', x.id, 'mode', x.mode, ['Espèces', 'Virement', 'Chèque', 'Carte', 'Autre']))}</div>
+          <div class="flex items-center justify-between gap-2"><span class="px-3 py-1 rounded-full text-sm font-bold border ${e[1]}">${e[0]}</span>${trash('finances', x.id)}</div>
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 rounded-2xl border border-slate-200 p-3">${lab('Date', inp('finances', x.id, 'date', x.date, 'date'))}${lab('Prix total (€)', inp('finances', x.id, 'prix', x.prix, 'number'))}${lab('Montant déjà versé (€)', inp('finances', x.id, 'verse', x.verse, 'number'))}<div class="rounded-xl border ${r > 0 ? 'border-red-300 bg-red-50 text-red-700' : 'border-slate-200 text-anthracite'} px-3 py-2"><div class="${LB}">Reste à payer (auto)</div><div class="text-xl font-titre">${eur(r)}</div></div></div>
+          <div class="text-base text-slate-700">${ce('finances', x.id, 'notes', x.notes, 'block min-h-[1.6rem]', 'Notes / précisions (ex : acompte versé, solde restant…)', 1)}</div>
+          <div class="flex flex-wrap gap-2"><button type="button" onclick="AD.completer('${x.id}')" class="btn-valider rounded-xl px-4 py-2.5 font-titre text-sm cursor-pointer">+ Verser / Compléter le solde</button><button type="button" onclick="AD.recu('${x.id}')" class="rounded-xl border-2 border-orCercle bg-amber-50 text-anthracite font-titre text-sm px-4 py-2.5 cursor-pointer">🧾 Générer Reçu</button></div></div>`;
+      }
+      function finList() {
+        const q = normaliserCle(F.fq);
+        return D.finances.filter((x) => (F.ff === 'tous' || etatK(x) === F.ff) && (!q || normaliserCle(x.nom + ' ' + x.notes + ' ' + x.type).includes(q))).map(rowFin).join('') || '<p class="py-4 text-slate-500">Aucune ligne.</p>';
+      }
       function vFin() {
-        const L = D.finances, n = (k) => L.reduce((s, x) => s + (+x[k] || 0), 0);
-        const reste = L.reduce((s, x) => s + Math.max(0, (+x.prix || 0) - (+x.verse || 0)), 0);
-        const sold = L.filter((x) => (+x.prix || 0) > 0 && (+x.verse || 0) >= (+x.prix || 0)).length;
-        const k = (t, v, c) => `<div class="rounded-2xl border-2 ${c} bg-white p-4"><div class="text-xs font-titre">${t}</div><div class="text-2xl font-titre mt-1">${v}</div></div>`;
-        return head('Finances & reçus — acomptes, achats, locations & soldes', 'Suivi budgétaire en euros, validation des acomptes/soldes et reçus à signer.',
-          addBtn('finances', { nom: '', type: 'Acompte', mode: 'Espèces', date: new Date().toISOString().slice(0, 10), prix: 0, verse: 0, notes: '' }, '+ Ajouter une ligne'))
-          + `<div class="grid grid-cols-2 gap-3">${k('Total prix prévu / engagé', eur(n('prix')), 'border-slate-300 text-anthracite')}${k('Total déjà versé', eur(n('verse')), 'border-emerald-300 text-foret')}${k('Reste à payer total', eur(reste), 'border-red-300 text-red-700')}${k('Lignes soldées / complètes', sold + ' / ' + L.length, 'border-amber-300 text-orFonce')}</div>`
-          + L.map((x) => { const e = etat(x), r = Math.max(0, (+x.prix || 0) - (+x.verse || 0)); return `<div class="${CARD}">
-            <div class="grid grid-cols-1 sm:grid-cols-4 gap-2"><div class="sm:col-span-2">${fld('Bénéficiaire / prestataire / article', inp('finances', x.id, 'nom', x.nom))}</div>${fld('Type', sel('finances', x.id, 'type', x.type, ['Acompte', 'Solde', 'Achat', 'Location', 'Cachet', 'Autre']))}${fld('Mode de paiement', sel('finances', x.id, 'mode', x.mode, ['Espèces', 'Virement', 'Chèque', 'Carte', 'Autre']))}</div>
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 items-end">${fld('Date', inp('finances', x.id, 'date', x.date, '', 'date'))}${fld('Prix total (€)', inp('finances', x.id, 'prix', x.prix, '', 'number'))}${fld('Montant déjà versé (€)', inp('finances', x.id, 'verse', x.verse, '', 'number'))}<div class="rounded-lg border ${r > 0 ? 'border-red-300 text-red-700' : 'border-slate-200 text-anthracite'} px-2.5 py-1.5"><div class="text-[11px] font-bold">Reste à payer</div><div class="font-titre">${eur(r)}</div></div></div>
-            ${fld('Notes / précisions', inp('finances', x.id, 'notes', x.notes))}
-            <div class="flex flex-wrap items-center justify-between gap-2"><span class="px-2.5 py-0.5 rounded-full text-xs font-bold border ${e[1]}">${e[0]}</span><div class="flex gap-2"><button type="button" onclick="AD.recu('${x.id}')" class="${BT} btn-valider">Reçu</button>${dBtn('finances', x.id)}</div></div></div>`; }).join('');
+        const L = D.finances, n = (k) => L.reduce((s, x) => s + (+x[k] || 0), 0), reste = L.reduce((s, x) => s + Math.max(0, (+x.prix || 0) - (+x.verse || 0)), 0), sold = L.filter((x) => etatK(x) === 'solde').length;
+        const k = (t, v, s, c) => `<div class="rounded-2xl border-2 ${c} bg-white p-4"><div class="text-xs font-titre uppercase tracking-wide text-slate-600">${t}</div><div class="text-3xl font-titre mt-1">${v}</div><div class="text-sm mt-1">${s}</div></div>`;
+        return ban('💰', 'Finances &amp; reçus — acomptes, achats, locations &amp; soldes', 'Suivi budgétaire en euros, validation des acomptes/soldes et génération de reçus signables', gold("AD.add('finances',{nom:'',type:'Acompte',mode:'Espèces',date:'" + today() + "',prix:0,verse:0,notes:''})", '+ Ajouter une ligne financière'))
+          + card(`<div class="grid grid-cols-2 gap-3">${k('Total prix prévu / engagé (€)', eur(n('prix')), 'Somme globale des lignes', 'border-slate-300 text-anthracite')}${k('Total déjà versé / acomptes (€)', eur(n('verse')), 'Montants effectivement réglés', 'border-emerald-300 text-foret')}${k('Reste à payer total (€)', eur(reste), 'Solde restant à verser', 'border-red-300 text-red-700')}${k('Lignes soldées / complètes', sold + ' / ' + L.length, 'Totalité réglée (« Soldé / Complet »)', 'border-amber-300 text-orFonce')}</div>`)
+          + card(`<div class="flex flex-wrap gap-2 mb-3">${chips(F.ff, [['tous', 'Toutes les lignes'], ['solde', 'Soldé / Complet ✅'], ['partiel', 'Partiel ⏳'], ['non', 'Non payé']], 'ffin')}</div><input type="search" value="${E(F.fq)}" oninput="AD.qfin(this.value)" placeholder="🔍 Rechercher DJ, nappes, trophées…" class="${IN} mb-2" /><div id="fin-list">${finList()}</div>`)
+          + `<div id="recu-zone">${rd ? recuZone() : ''}</div>`;
       }
+      function completer(id) { const x = find('finances', id); if (!x) return; if (!(+x.prix > 0)) { afficherToast("Renseignez d'abord le prix total.", 'error'); return; } x.verse = +x.prix; save(); render(); afficherToast('Solde complété : ' + x.nom); }
+      function ffin(v) { F.ff = v; render(); }
+      function qfin(v) { F.fq = v; document.getElementById('fin-list').innerHTML = finList(); }
+
+      /* ---------- Reçus ---------- */
       function recu(id) {
-        const x = D.finances.find((f) => f.id === id); if (!x) return;
-        if (!x.recu) { D.recuN = (D.recuN || 0) + 1; x.recu = D.recuN; save(); }
-        const p = +x.prix || 0, v = +x.verse || 0, r = Math.max(0, p - v), ok = p > 0 && r === 0;
-        const d = x.date ? new Date(x.date + 'T12:00:00').toLocaleDateString('fr-FR') : '';
-        const motif = (x.type === 'Acompte' ? 'Acompte sur prestation' : x.type) + ' — Grande Journée Culturelle F.K.C.S.';
-        const bx = (l, t, c) => `<div class="rounded-xl border ${c || 'border-slate-200'} p-3"><div class="text-[11px] font-bold text-anthracite/60">${l}</div><div class="font-titre text-sm">${t}</div></div>`;
-        document.getElementById('recu-body').innerHTML = `<div class="border-2 border-foret rounded-2xl p-4 space-y-3">
-          <div class="flex justify-between gap-3"><div><div class="text-xs font-titre text-foret">FEDDE KAWRAL COMMUNE DE SAGNÉ (F.K.C.S.)</div><h3 class="text-xl font-titre text-foret">REÇU DE RÈGLEMENT / ACOMPTE / SOLDE</h3><div class="text-xs">Grande Journée Culturelle — Samedi 23 janvier 2027 • Espace des Habitants, Les Mureaux</div></div>
-          <div class="text-xs text-right font-bold border border-orCercle rounded-xl p-2 h-fit shrink-0">Reçu N° RECU-FKCS-${String(x.recu).padStart(3, '0')}<br>Date : ${d}<br>Mode : ${E(x.mode)}</div></div>
-          <div class="grid grid-cols-2 gap-2">${bx('BÉNÉFICIAIRE / PRESTATAIRE', E(x.nom))}${bx('MOTIF / DÉSIGNATION', E(motif))}</div>
-          <div class="grid grid-cols-3 gap-2">${bx('PRIX TOTAL CONVENU', eur(p))}${bx('SOMME VERSÉE', eur(v), 'border-emerald-300')}${bx('RESTE À PAYER', eur(r))}</div>
-          <div class="rounded-xl border-2 border-orCercle p-3 text-center font-titre text-sm">${ok ? 'MENTION OFFICIELLE : RÈGLEMENT SOLDÉ — TOTALITÉ RÉGLÉE' : 'MENTION OFFICIELLE : ACOMPTE / RÈGLEMENT PARTIEL — RESTE À PAYER : ' + eur(r)}</div>
-          ${x.notes ? `<div class="text-sm"><b>Observation :</b> ${E(x.notes)}</div>` : ''}
-          <div class="grid grid-cols-2 gap-2"><div class="rounded-xl border p-3 h-28 text-xs font-bold">SIGNATURE DU BÉNÉFICIAIRE<div class="italic font-normal mt-1">Lu et approuvé — Date et signature</div></div><div class="rounded-xl border p-3 h-28 text-xs font-bold">SIGNATURE DU RESPONSABLE F.K.C.S. / TRÉSORIER<div class="italic font-normal mt-1">Cachet et signature officielle F.K.C.S.</div></div></div></div>`;
-        document.getElementById('recu-modal').classList.remove('hidden');
-        render();
+        const i = D.finances.findIndex((f) => f.id === id), x = D.finances[i]; if (!x) return;
+        rd = { id, numero: 'RECU-FKCS-' + (i + 1) + '-' + ((x.date || today()).slice(0, 4)), date: x.date || today(), nom: x.nom, motif: (x.type === 'Acompte' ? 'Acompte sur prestation' : x.type) + ' — Grande Journée Culturelle F.K.C.S.', prix: +x.prix || 0, verse: +x.verse || 0, mode: x.mode, obs: x.notes || '' };
+        render(); afficherToast('Reçu préparé pour "' + x.nom + '"');
+        const z = document.getElementById('recu-zone'); if (z) z.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
-      function fermerRecu() { document.getElementById('recu-modal').classList.add('hidden'); }
-      function imprimerRecu() {
-        document.body.classList.add('print-recu');
-        const fin = () => document.body.classList.remove('print-recu');
-        window.addEventListener('afterprint', fin, { once: true });
-        window.print();
-        setTimeout(fin, 4000);
+      const rc = () => { const p = +rd.prix || 0, v = +rd.verse || 0, r = Math.max(0, p - v); return { p, v, r, m: p > 0 && r === 0 ? 'MENTION OFFICIELLE : RÈGLEMENT SOLDÉ — TOTALITÉ RÉGLÉE' : p === 0 ? 'MENTION OFFICIELLE : SOMME REÇUE — ' + eur(v) : 'MENTION OFFICIELLE : ACOMPTE / RÈGLEMENT PARTIEL — RESTE À PAYER : ' + eur(r) }; };
+      function recuPrev() {
+        const c = rc(), bx = (l, t, k) => `<div class="rounded-xl border ${k || 'border-slate-200'} p-3"><div class="text-[11px] font-titre uppercase text-slate-500">${l}</div><div class="font-titre text-base mt-0.5">${t}</div></div>`;
+        return `<div class="border-2 border-foret rounded-2xl p-4 space-y-3 bg-white"><div class="flex items-start gap-3"><img src="${LOGO()}" class="w-16 h-16 rounded-full border-2 border-orCercle object-cover shrink-0"><div class="min-w-0"><div class="text-xs font-titre text-foret">FEDDE KAWRAL COMMUNE DE SAGNÉ (F.K.C.S.)</div><h3 class="font-titre text-xl text-foret leading-tight">REÇU DE RÈGLEMENT / ACOMPTE / SOLDE</h3><div class="text-sm text-slate-600">Grande Journée Culturelle — Samedi 23 janvier 2027 • Espace des Habitants, Les Mureaux</div></div></div>
+          <div class="rounded-xl border border-orCercle bg-amber-50 p-3 text-sm font-bold">Reçu N° ${E(rd.numero)} &nbsp;•&nbsp; Date : ${E(rd.date)} &nbsp;•&nbsp; Mode : ${E(rd.mode)}</div>
+          <div class="grid grid-cols-2 gap-2">${bx('Bénéficiaire / prestataire', E(rd.nom))}${bx('Motif / désignation', E(rd.motif))}</div>
+          <div class="grid grid-cols-3 gap-2">${bx('Prix total convenu', eur(c.p))}${bx('Somme versée', eur(c.v), 'border-emerald-300')}${bx('Reste à payer', eur(c.r))}</div>
+          <div class="rounded-xl border-2 border-orCercle bg-amber-50 p-3 text-center font-titre text-sm">${c.m}</div>${rd.obs ? `<div class="text-sm"><b>Observation :</b> ${E(rd.obs)}</div>` : ''}
+          <div class="grid grid-cols-2 gap-2"><div class="rounded-xl border p-3 h-28 text-xs font-bold">SIGNATURE DU BÉNÉFICIAIRE / PRESTATAIRE<div class="italic font-normal mt-1 text-slate-500">Lu et approuvé — Date et signature</div></div><div class="rounded-xl border p-3 h-28 text-xs font-bold">SIGNATURE DU RESPONSABLE F.K.C.S. / TRÉSORIER<div class="italic font-normal mt-1 text-slate-500">Cachet et signature officielle F.K.C.S.</div></div></div></div>`;
+      }
+      const rin = (f, l, t) => lab(l, `<input type="${t || 'text'}" value="${E(rd[f])}" ${t === 'number' ? 'inputmode="decimal" step="0.01"' : ''} oninput="AD.rset('${f}',this.value,${t === 'number' ? 1 : 0})" class="${IN}" />`);
+      function recuZone() {
+        const b = (k, l, c) => `<button type="button" onclick="AD.ract('${k}')" class="rounded-xl px-4 py-3 font-titre text-sm cursor-pointer border-2 ${c}">${l}</button>`;
+        return card(`<h3 class="font-titre text-lg text-foret mb-1">🧾 Reçu de paiement / acompte / solde</h3><p class="text-sm text-slate-600 mb-3">Modifiez librement les informations ci-dessous, puis téléchargez ou partagez le reçu (avec le logo F.K.C.S.).</p>
+          <div class="grid grid-cols-2 gap-3 mb-3">${rin('numero', 'N° de reçu')}${rin('date', 'Date du reçu', 'date')}${rin('nom', 'Bénéficiaire / prestataire')}${rin('motif', 'Motif / désignation')}${rin('prix', 'Prix total convenu (€)', 'number')}${rin('verse', "Somme versée aujourd'hui (€)", 'number')}${lab('Mode de paiement', `<select onchange="AD.rset('mode',this.value)" class="${IN}">${['Espèces', 'Virement', 'Chèque', 'Carte', 'Autre'].map((m) => `<option ${m === rd.mode ? 'selected' : ''}>${m}</option>`).join('')}</select>`)}${rin('obs', 'Observation complémentaire')}</div>
+          <div id="recu-prev">${recuPrev()}</div>
+          <div class="flex flex-wrap gap-2 mt-3">${b('pdf', '📄 Reçu PDF', 'bg-amber-50 border-orCercle')}${b('jpg', '🖼️ Reçu JPG', 'bg-amber-50 border-orCercle')}${b('share', "📤 Partager l'image", 'bg-emerald-50 border-emerald-400')}${b('wa', '💬 WhatsApp (texte)', 'bg-emerald-50 border-emerald-400')}</div>`, 'border-2 border-foret');
+      }
+      function rset(f, v, num) { rd[f] = num ? (parseFloat(String(v).replace(',', '.')) || 0) : v; document.getElementById('recu-prev').innerHTML = recuPrev(); }
+
+      /* ---------- Fabrication d'images et de PDF (sans imprimante) ---------- */
+      const loadImg = (s) => new Promise((r) => { if (!s) return r(null); const i = new Image(); i.onload = () => r(i); i.onerror = () => r(null); i.src = s; });
+      const toBlob = (cv) => new Promise((r) => cv.toBlob(r, 'image/jpeg', 0.92));
+      const toBytes = async (cv) => new Uint8Array(await (await toBlob(cv)).arrayBuffer());
+      function dl(b, n) { const a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = n; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); }
+      async function partage(b, n, type) {
+        const f = new File([b], n, { type });
+        try { if (navigator.canShare && navigator.canShare({ files: [f] })) { await navigator.share({ files: [f], title: n }); return; } } catch (e) { if (e && e.name === 'AbortError') return; }
+        dl(b, n); afficherToast('Partage indisponible ici : le fichier a été téléchargé.', 'error');
+      }
+      const wa = (t) => window.open('https://wa.me/?text=' + encodeURIComponent(t), '_blank');
+      function mkPdf(pages) {
+        const en = new TextEncoder(), ch = [], offs = []; let n = 0;
+        const P = (s) => { const b = typeof s === 'string' ? en.encode(s) : s; ch.push(b); n += b.length; };
+        const O = (i, fn) => { offs[i] = n; P(i + ' 0 obj\n'); fn(); P('\nendobj\n'); };
+        const N = pages.length, tot = 2 + 3 * N;
+        P('%PDF-1.4\n');
+        O(1, () => P('<< /Type /Catalog /Pages 2 0 R >>'));
+        O(2, () => P('<< /Type /Pages /Count ' + N + ' /Kids [' + pages.map((_, i) => (3 + 3 * i) + ' 0 R').join(' ') + '] >>'));
+        pages.forEach((p, i) => {
+          const a = 3 + 3 * i, PW = 595.28, PH = 841.89; let w = PW, h = PH, x = 0, y = 0;
+          if (!p.full) { w = PW - 80; h = w * p.h / p.w; if (h > PH - 80) { h = PH - 80; w = h * p.w / p.h; } x = (PW - w) / 2; y = PH - 40 - h; }
+          const cs = `q ${w.toFixed(2)} 0 0 ${h.toFixed(2)} ${x.toFixed(2)} ${y.toFixed(2)} cm /Im0 Do Q`;
+          O(a, () => P('<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595.28 841.89] /Resources << /XObject << /Im0 ' + (a + 2) + ' 0 R >> >> /Contents ' + (a + 1) + ' 0 R >>'));
+          O(a + 1, () => P('<< /Length ' + cs.length + ' >>\nstream\n' + cs + '\nendstream'));
+          O(a + 2, () => { P('<< /Type /XObject /Subtype /Image /Width ' + p.w + ' /Height ' + p.h + ' /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /DCTDecode /Length ' + p.d.length + ' >>\nstream\n'); P(p.d); P('\nendstream'); });
+        });
+        const xr = n; P('xref\n0 ' + (tot + 1) + '\n0000000000 65535 f \n');
+        for (let i = 1; i <= tot; i++) P(String(offs[i]).padStart(10, '0') + ' 00000 n \n');
+        P('trailer\n<< /Size ' + (tot + 1) + ' /Root 1 0 R >>\nstartxref\n' + xr + '\n%%EOF');
+        return new Blob(ch, { type: 'application/pdf' });
+      }
+      const rr = (g, x, y, w, h, r) => { g.beginPath(); g.moveTo(x + r, y); g.arcTo(x + w, y, x + w, y + h, r); g.arcTo(x + w, y + h, x, y + h, r); g.arcTo(x, y + h, x, y, r); g.arcTo(x, y, x + w, y, r); g.closePath(); };
+      function wrapT(g, s, w) { if (!s) return ['']; const o = []; let c = ''; String(s).split(' ').forEach((wd) => { const t = c ? c + ' ' + wd : wd; if (g.measureText(t).width > w && c) { o.push(c); c = wd; } else c = t; }); o.push(c); return o; }
+      async function cvRecu() {
+        const c = rc(), L = await loadImg(LOGO()), cv = document.createElement('canvas'); cv.width = 1000; cv.height = 1230; const g = cv.getContext('2d');
+        g.fillStyle = '#fff'; g.fillRect(0, 0, 1000, 1230); g.strokeStyle = '#1B5E20'; g.lineWidth = 6; rr(g, 20, 20, 960, 1190, 26); g.stroke();
+        if (L) { g.save(); g.beginPath(); g.arc(135, 135, 75, 0, 7); g.clip(); g.drawImage(L, 60, 60, 150, 150); g.restore(); g.strokeStyle = '#D4AF37'; g.lineWidth = 4; g.beginPath(); g.arc(135, 135, 75, 0, 7); g.stroke(); }
+        const T = (s, x, y, f, col, al) => { g.font = f; g.fillStyle = col; g.textAlign = al || 'left'; g.fillText(s, x, y); };
+        T('FEDDE KAWRAL COMMUNE DE SAGNÉ (F.K.C.S.)', 235, 100, 'bold 24px Arial', '#1B5E20'); T('REÇU DE RÈGLEMENT / ACOMPTE / SOLDE', 235, 148, 'bold 36px Arial', '#1B5E20');
+        T('Grande Journée Culturelle — Samedi 23 janvier 2027', 235, 186, '22px Arial', '#475569'); T('Espace des Habitants, Les Mureaux', 235, 214, '22px Arial', '#475569');
+        g.fillStyle = '#FFF8E1'; g.strokeStyle = '#D4AF37'; g.lineWidth = 3; rr(g, 50, 250, 900, 80, 14); g.fill(); g.stroke();
+        T('Reçu N° ' + rd.numero, 75, 300, 'bold 26px Arial', '#7B3F00'); T('Date : ' + rd.date + '   •   Mode : ' + rd.mode, 925, 300, 'bold 24px Arial', '#1F2924', 'right');
+        const box = (x, y, w, h, l, t, col) => { g.strokeStyle = col || '#CBD5E1'; g.lineWidth = 2; rr(g, x, y, w, h, 14); g.stroke(); T(l, x + 18, y + 34, 'bold 18px Arial', '#64748B'); g.font = 'bold 26px Arial'; wrapT(g, t, w - 36).slice(0, 3).forEach((s, i) => T(s, x + 18, y + 72 + i * 32, 'bold 26px Arial', '#0F172A')); };
+        box(50, 360, 435, 150, 'BÉNÉFICIAIRE / PRESTATAIRE', rd.nom); box(515, 360, 435, 150, 'MOTIF / DÉSIGNATION', rd.motif);
+        box(50, 540, 285, 110, 'PRIX TOTAL CONVENU', eur(c.p)); box(357, 540, 285, 110, 'SOMME VERSÉE', eur(c.v), '#86EFAC'); box(665, 540, 285, 110, 'RESTE À PAYER', eur(c.r));
+        g.fillStyle = '#FFF4D6'; g.strokeStyle = '#E0A800'; g.lineWidth = 4; rr(g, 50, 685, 900, 110, 16); g.fill(); g.stroke();
+        g.font = 'bold 26px Arial'; wrapT(g, c.m, 840).slice(0, 2).forEach((s, i, a) => T(s, 500, 740 + (i - (a.length - 1) / 2) * 34, 'bold 26px Arial', '#5A2D00', 'center'));
+        if (rd.obs) { g.font = '24px Arial'; wrapT(g, 'Observation : ' + rd.obs, 900).slice(0, 3).forEach((s, i) => T(s, 55, 850 + i * 32, '24px Arial', '#1F2924')); }
+        const sg = (x, l, s) => { g.strokeStyle = '#CBD5E1'; g.lineWidth = 2; rr(g, x, 965, 435, 200, 14); g.stroke(); T(l, x + 18, 1000, 'bold 18px Arial', '#1B5E20'); T(s, x + 18, 1140, 'italic 20px Arial', '#64748B'); };
+        sg(50, 'SIGNATURE DU BÉNÉFICIAIRE / PRESTATAIRE', 'Lu et approuvé — Date et signature'); sg(515, 'SIGNATURE DU RESPONSABLE F.K.C.S. / TRÉSORIER', 'Cachet et signature officielle F.K.C.S.');
+        return cv;
+      }
+      async function ract(k) {
+        if (!rd) return; const nom = rd.numero.replace(/[^A-Za-z0-9-]/g, '_'), c = rc();
+        if (k === 'wa') { wa('*REÇU F.K.C.S. — ' + rd.numero + '*\nDate : ' + rd.date + '\nBénéficiaire : ' + rd.nom + '\nMotif : ' + rd.motif + '\nPrix total : ' + eur(c.p) + '\nSomme versée : ' + eur(c.v) + '\nReste à payer : ' + eur(c.r) + '\nMode : ' + rd.mode + '\n\n' + c.m); return; }
+        const cv = await cvRecu();
+        if (k === 'jpg') dl(await toBlob(cv), nom + '.jpg');
+        else if (k === 'share') await partage(await toBlob(cv), nom + '.jpg', 'image/jpeg');
+        else dl(mkPdf([{ d: await toBytes(cv), w: cv.width, h: cv.height }]), nom + '.pdf');
       }
 
-      /* --- Présence --- */
+      /* Documents texte (compte rendu, rapport complet) → pages JPEG / PDF */
+      async function docCv(titre, sous, blocs, single) {
+        const L = await loadImg(LOGO()), PW = 1240, PH = 1754, M = 90, LH = 38, F0 = '26px Arial', m = document.createElement('canvas').getContext('2d'); m.font = F0;
+        const ops = []; blocs.forEach((b) => { if (b.h) ops.push({ k: 'h', s: b.h }); b.lines.forEach((l) => wrapT(m, l, PW - 2 * M).forEach((s) => ops.push({ k: 'l', s }))); ops.push({ k: 'g' }); });
+        const pages = [[]]; let y = 260;
+        ops.forEach((o) => { const h = o.k === 'h' ? 74 : o.k === 'l' ? LH : 22; if (!single && y + h > PH - 110) { pages.push([]); y = M; } pages[pages.length - 1].push({ ...o, y }); y += h; });
+        const H = single ? y + 100 : PH;
+        return pages.map((pg, pi) => {
+          const cv = document.createElement('canvas'); cv.width = PW; cv.height = H; const g = cv.getContext('2d'); g.fillStyle = '#fff'; g.fillRect(0, 0, PW, H);
+          if (pi === 0) {
+            if (L) { g.save(); g.beginPath(); g.arc(M + 70, 140, 70, 0, 7); g.clip(); g.drawImage(L, M, 70, 140, 140); g.restore(); }
+            g.fillStyle = '#1B5E20'; g.font = 'bold 40px Arial'; g.textAlign = 'left'; wrapT(g, titre, PW - M * 2 - 190).slice(0, 2).forEach((s, i) => g.fillText(s, M + 180, 120 + i * 46));
+            g.fillStyle = '#64748B'; g.font = '24px Arial'; g.fillText(sous || '', M + 180, 205); g.fillStyle = '#D4AF37'; g.fillRect(M, 235, PW - 2 * M, 4);
+          }
+          pg.forEach((o) => { if (o.k === 'h') { g.fillStyle = '#1B5E20'; g.font = 'bold 30px Arial'; g.fillText(o.s, M, o.y + 44); g.fillStyle = '#E5E7EB'; g.fillRect(M, o.y + 56, PW - 2 * M, 2); } else if (o.k === 'l') { g.fillStyle = '#1F2924'; g.font = F0; g.fillText(o.s, M, o.y + 28); } });
+          g.fillStyle = '#94A3B8'; g.font = '20px Arial'; g.textAlign = 'center'; g.fillText('F.K.C.S. — Fedde Kawral Commune de Sagné — page ' + (pi + 1) + '/' + pages.length, PW / 2, H - 50);
+          return cv;
+        });
+      }
+      async function sortie(k, nom, titre, sous, blocs) {
+        if (k === 'wa') { wa(titre + '\n' + (sous || '') + '\n\n' + blocs.map((b) => (b.h ? '*' + b.h + '*\n' : '') + b.lines.join('\n')).join('\n\n').slice(0, 3500)); return; }
+        if (k === 'jpg') { const [cv] = await docCv(titre, sous, blocs, true); dl(await toBlob(cv), nom + '.jpg'); return; }
+        const pg = await docCv(titre, sous, blocs, false), pdf = mkPdf(await Promise.all(pg.map(async (cv) => ({ d: await toBytes(cv), w: cv.width, h: cv.height, full: true }))));
+        if (k === 'share') await partage(pdf, nom + '.pdf', 'application/pdf'); else dl(pdf, nom + '.pdf');
+      }
+      const PLAIN = { envoye: 'Envoyé / Validé', attente: "En attente d'envoi", modifier: 'À modifier', a_traiter: 'À traiter' };
+      function blocsTout() {
+        const f = D.finances, n = (k) => f.reduce((s, x) => s + (+x[k] || 0), 0), g = {};
+        D.invitations.forEach((i) => { (g[i.groupe] = g[i.groupe] || []).push(i); });
+        return [{ h: 'Finances & reçus', lines: ['Total prévu : ' + eur(n('prix')) + ' — Déjà versé : ' + eur(n('verse')) + ' — Reste à payer : ' + eur(f.reduce((s, x) => s + Math.max(0, (+x.prix || 0) - (+x.verse || 0)), 0)), ...f.map((x) => '• ' + x.nom + ' (' + x.type + ', ' + x.mode + ', ' + x.date + ') : prix ' + eur(x.prix) + ', versé ' + eur(x.verse) + ', reste ' + eur(Math.max(0, (+x.prix || 0) - (+x.verse || 0))) + (x.notes ? ' — ' + x.notes : ''))] },
+          { h: 'Programme de la journée', lines: D.programme.length ? D.programme.map((x) => '• ' + x.heure + ' — ' + x.titre + (x.intervenant ? ' (' + x.intervenant + ')' : '') + (x.fait ? ' [réalisé]' : '')) : ['(aucune étape saisie)'] },
+          { h: 'Liste de présence (' + D.presence.filter((p) => p.present).length + ' présent(s))', lines: D.presence.map((p, i) => (i + 1) + '. ' + p.nom + ' — ' + p.tel + ' — ' + p.cat + ' — arrivée ' + p.heure + (p.present ? '' : ' — non validé')) },
+          { h: 'Logistique & technique', lines: D.logistique.map((x) => '• ' + x.titre + ' : ' + x.detail + ' [' + x.statut + ']') },
+          ...Object.entries(g).map(([nm, a]) => ({ h: 'Invitations — ' + nm, lines: a.map((i) => '• ' + i.nom + ' — ' + PLAIN[i.statut] + (i.detail ? ' (' + i.detail + ')' : '')) })),
+          { h: 'Commissions de travail', lines: D.commissions.map((x, i) => (i + 1) + '. ' + x.titre + ' — Responsables : ' + x.resp + ' — ' + x.missions + ' [' + x.statut + ']') },
+          ...D.comptes.map((c) => ({ h: 'Compte rendu — ' + c.titre, lines: (c.texte || '').split('\n') })),
+          ...(D.notes ? [{ h: 'Bloc-notes de séance', lines: D.notes.split('\n') }] : [])];
+      }
+      const exportPdf = async () => { afficherToast('Préparation du PDF…'); await sortie('pdf', 'FKCS-tableau-de-bord', 'Tableau de bord F.K.C.S.', 'Grande Journée Culturelle — 23 janvier 2027 — édité le ' + new Date().toLocaleDateString('fr-FR'), blocsTout()); };
+      function exportJson() { dl(new Blob([JSON.stringify(D, null, 1)], { type: 'application/json' }), 'fkcs-admin-sauvegarde.json'); }
+      function restaurer(inp) {
+        const f = inp.files && inp.files[0]; if (!f) return;
+        f.text().then((t) => { const o = JSON.parse(t); if (!o || !Array.isArray(o.finances)) throw 0; D = o; migrer(); merge(); save(); render(); afficherToast('Sauvegarde restaurée.'); }).catch(() => afficherToast('Fichier de sauvegarde invalide.', 'error')); inp.value = '';
+      }
+
+      /* ---------- Programme ---------- */
+      function vProg() {
+        return ban('📅', 'Programme de la journée culturelle (23 janvier 2027)', 'Modifiez les horaires, séquences, intervenants ou cochez les étapes réalisées', gold("AD.add('programme',{heure:'',titre:'',intervenant:'',fait:false})", '+ Ajouter une étape'))
+          + card(D.programme.length ? D.programme.map((x) => `<div class="flex items-center gap-3 py-3 border-b border-amber-100 last:border-0"><button type="button" onclick="AD.tog('programme','${x.id}','fait',${!x.fait})" class="text-3xl cursor-pointer">${x.fait ? '☑️' : '⬜'}</button><div class="flex-1 min-w-0"><div class="text-lg font-bold">${ce('programme', x.id, 'heure', x.heure, 'text-orFonce', 'Heure')} — ${ce('programme', x.id, 'titre', x.titre, '', 'Séquence')}</div><div class="text-base text-slate-600">${ce('programme', x.id, 'intervenant', x.intervenant, '', 'Intervenant')}</div></div>${trash('programme', x.id)}</div>`).join('') : '<p class="text-base text-slate-500 py-2">Aucune étape pour le moment. Touchez « + Ajouter une étape ».</p>');
+      }
+
+      /* ---------- Présence ---------- */
+      const CATS = ['Invité', 'Membre F.K.C.S.', 'Bureau', 'Partenaire', 'Autre'];
+      function presList() {
+        const q = normaliserCle(F.pq), tels = {}; D.presence.forEach((p) => { const t = String(p.tel || '').replace(/\D/g, ''); if (t) tels[t] = (tels[t] || 0) + 1; });
+        return D.presence.map((p, i) => ({ p, i })).filter(({ p }) => (F.pc === 'tous' || p.cat === F.pc) && (!q || normaliserCle(p.nom + ' ' + p.tel).includes(q))).map(({ p, i }) => `<div class="flex items-center gap-3 py-3.5 border-b border-amber-100 last:border-0"><span class="w-9 h-9 rounded-full border-2 border-orCercle text-sm font-bold flex items-center justify-center shrink-0">${i + 1}</span>
+          <div class="flex-1 min-w-0"><div class="flex flex-wrap items-center gap-2"><span class="text-lg font-bold">${ce('presence', p.id, 'nom', p.nom, '', 'Nom')}</span><span class="px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 border border-amber-300 text-orFonce">${E(p.cat)}</span>${tels[String(p.tel || '').replace(/\D/g, '')] > 1 ? '<span class="px-2 py-0.5 rounded-full text-xs font-bold bg-rose-50 border border-rose-300 text-rose-700">même n° ×2</span>' : ''}</div><div class="text-base text-slate-600 mt-0.5">📞 ${ce('presence', p.id, 'tel', p.tel, '', 'Téléphone')} &nbsp; 🕐 Arrivée : <b class="text-foret">${ce('presence', p.id, 'heure', p.heure, '', 'hh:mm')}</b></div></div>
+          <button type="button" onclick="AD.tog('presence','${p.id}','present',${!p.present})" class="shrink-0 rounded-xl border-2 px-3 py-2 text-sm font-bold cursor-pointer ${p.present ? 'bg-emerald-50 text-foret border-emerald-400' : 'bg-white text-slate-600 border-slate-300'}">${p.present ? 'Présent validé ✅' : 'Non validé'}</button>${trash('presence', p.id)}</div>`).join('') || '<p class="py-4 text-slate-500">Aucun résultat.</p>';
+      }
       function vPres() {
-        const L = D.presence, tels = {};
-        L.forEach((p) => { const t = String(p.tel || '').replace(/\D/g, ''); if (t) tels[t] = (tels[t] || 0) + 1; });
-        const now = new Date().toTimeString().slice(0, 5);
-        return head('Liste de présence (arrivées & émargement)', `${L.filter((p) => p.present).length} présent(s) validé(s) sur ${L.length} ligne(s).`,
-          addBtn('presence', { nom: '', tel: '', cat: 'Membre F.K.C.S.', heure: now, present: true }, '+ Ajouter une personne'))
-          + L.map((p, i) => { const dbl = tels[String(p.tel || '').replace(/\D/g, '')] > 1; return `<div class="${CARD}">
-            <div class="flex items-center gap-2"><span class="w-7 h-7 rounded-full border-2 border-orCercle text-xs font-bold flex items-center justify-center shrink-0">${i + 1}</span><div class="flex-1">${inp('presence', p.id, 'nom', p.nom, 'Nom et prénom')}</div>${dbl ? '<span class="text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-300 rounded-full px-2 py-0.5">Même n° ×2</span>' : ''}</div>
-            <div class="grid grid-cols-2 sm:grid-cols-3 gap-2">${fld('Téléphone', inp('presence', p.id, 'tel', p.tel, '', 'tel'))}${fld('Catégorie', sel('presence', p.id, 'cat', p.cat, ['Membre F.K.C.S.', 'Invité', 'Autre']))}${fld('Arrivée', inp('presence', p.id, 'heure', p.heure, '', 'time'))}</div>
-            <div class="flex justify-between gap-2"><button type="button" onclick="AD.set('presence','${p.id}','present',${!p.present})" class="${BT} border-2 ${p.present ? 'bg-emerald-50 text-foret border-foret' : 'bg-white text-slate-600 border-slate-300'}">${p.present ? 'Présent validé ✅' : 'Non validé'}</button>${dBtn('presence', p.id)}</div></div>`; }).join('');
+        return ban('📋', 'Liste de présence (arrivées &amp; émargement)', 'Saisie tactile rapide : Nom &amp; Prénom, Téléphone, Catégorie, Heure &amp; Validation', `<div class="flex gap-2"><button type="button" onclick="AD.csv()" class="rounded-xl border border-emerald-300 bg-emerald-50 text-foret text-sm font-bold px-3 py-2 cursor-pointer">📥 Exporter CSV</button>${gold('AD.copier()', '📋 Copier la liste')}</div>`)
+          + card(`<div class="grid grid-cols-2 gap-3">${lab('Nom &amp; Prénom *', `<input id="p-nom" type="text" placeholder="Ex : Mariama Ba" class="${IN}" />`)}${lab('Numéro de téléphone', `<input id="p-tel" type="tel" placeholder="Ex : 06 12 34 56 78" class="${IN}" />`)}${lab('Catégorie / rôle', `<select id="p-cat" class="${IN}">${CATS.map((c) => `<option>${c}</option>`).join('')}</select>`)}${lab('Heure', `<input id="p-h" type="time" value="${new Date().toTimeString().slice(0, 5)}" class="${IN}" />`)}</div><button type="button" onclick="AD.pAdd()" class="btn-valider w-full sm:w-auto rounded-xl px-6 py-3 mt-3 font-titre text-base cursor-pointer">Valider présence ✅</button>`)
+          + card(`<div class="flex flex-wrap items-center gap-2 mb-3"><span class="font-titre text-sm text-slate-600">FILTRER :</span><select onchange="AD.pcat(this.value)" class="${IN} !w-auto"><option value="tous">Toutes les catégories</option>${CATS.map((c) => `<option ${F.pc === c ? 'selected' : ''}>${c}</option>`).join('')}</select><span class="${CH} border-emerald-400 text-foret">Tous les inscrits : ${D.presence.length}</span></div><input type="search" value="${E(F.pq)}" oninput="AD.qpres(this.value)" placeholder="🔍 Rechercher un nom, téléphone…" class="${IN} mb-2" /><div id="pres-list">${presList()}</div>`);
       }
+      function pAdd() {
+        const v = (i) => document.getElementById(i).value.trim(), nom = v('p-nom'); if (!nom) { afficherToast('Saisissez le nom et prénom.', 'error'); return; }
+        const tel = v('p-tel'), t = tel.replace(/\D/g, '');
+        if (t && D.presence.some((p) => p.tel.replace(/\D/g, '') === t)) afficherToast('Attention : ce numéro est déjà dans la liste.', 'error');
+        add('presence', { nom, tel, cat: v('p-cat'), heure: v('p-h'), present: true }, true); afficherToast('Présence validée : ' + nom);
+      }
+      const pcat = (v) => { F.pc = v; render(); };
+      const qpres = (v) => { F.pq = v; document.getElementById('pres-list').innerHTML = presList(); };
+      function csv() { dl(new Blob(['\ufeff' + 'N°;Nom;Téléphone;Catégorie;Arrivée;Présent\n' + D.presence.map((p, i) => [i + 1, p.nom, p.tel, p.cat, p.heure, p.present ? 'oui' : 'non'].join(';')).join('\n')], { type: 'text/csv' }), 'FKCS-presence.csv'); }
+      function copier() { const t = D.presence.map((p, i) => (i + 1) + '. ' + p.nom + ' — ' + p.tel + ' — ' + p.cat + ' — ' + p.heure).join('\n'); (navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => afficherToast('Liste copiée.')).catch(() => afficherToast('Copie impossible sur cet appareil.', 'error')); }
 
-      /* --- Logistique --- */
+      /* ---------- Logistique ---------- */
       function vLog() {
-        return head('État d\'avancement logistique & technique', 'Touchez le statut pour passer de « En cours » à « Validé ».', addBtn('logistique', { titre: 'Nouveau point logistique', detail: '', statut: 'En cours' }, '+ Ajouter un point'))
-          + D.logistique.map((x) => `<div class="${CARD}">${fld('Point', inp('logistique', x.id, 'titre', x.titre))}${fld('Détails', inp('logistique', x.id, 'detail', x.detail))}<div class="flex justify-between gap-2">${tog('logistique', x.id, x.statut, 'Validé', 'En cours')}${dBtn('logistique', x.id)}</div></div>`).join('');
+        return ban('🏛️', "État d'avancement logistique &amp; technique", "Touchez le statut d'une ligne pour passer de « En cours » à « Validé »", gold("AD.add('logistique',{titre:'Nouveau point logistique',detail:'',statut:'En cours'})", '+ Ajouter un point'))
+          + card(D.logistique.map((x) => `<div class="flex items-center gap-3 py-3.5 border-b border-amber-100 last:border-0"><div class="flex-1 min-w-0"><div class="text-lg font-bold">${ce('logistique', x.id, 'titre', x.titre, '', 'Point')}</div><div class="text-base text-slate-600">${ce('logistique', x.id, 'detail', x.detail, '', 'Touchez ici pour préciser les détails…')}</div></div><button type="button" onclick="AD.tog('logistique','${x.id}','statut','${x.statut === 'Validé' ? 'En cours' : 'Validé'}')" class="shrink-0 rounded-xl border-2 px-3 py-2 text-sm font-bold cursor-pointer ${x.statut === 'Validé' ? 'bg-emerald-50 text-foret border-emerald-400' : 'bg-amber-50 text-orFonce border-amber-400'}">${x.statut === 'Validé' ? 'Validé ✅' : 'En cours ⏳'}</button>${trash('logistique', x.id)}</div>`).join(''));
       }
 
-      /* --- Invitations & courriers --- */
-      const ST = { envoye: ['Envoyé / Validé ✅', 'bg-emerald-50 text-foret border-foret'], attente: ["En attente d'envoi ⏳", 'bg-amber-50 text-orFonce border-orCercle'], a_traiter: ['À traiter', 'bg-slate-100 text-slate-700 border-slate-300'] };
+      /* ---------- Invitations ---------- */
+      const PILL = { envoye: 'bg-emerald-50 text-foret border-emerald-400', attente: 'bg-amber-50 text-orFonce border-amber-400', modifier: 'bg-rose-50 text-rose-700 border-rose-300', a_traiter: 'bg-slate-100 text-slate-700 border-slate-300' };
+      const PTXT = { envoye: 'Envoyé / Validé ✅', attente: "En attente d'envoi ⏳", modifier: 'À modifier ✏️', a_traiter: 'À traiter' };
       function invList() {
-        const q = normaliserCle(filtre), L = D.invitations.filter((i) => !q || normaliserCle(i.nom + ' ' + i.detail + ' ' + i.groupe).includes(q));
-        const groupes = [...new Set(L.map((i) => i.groupe))];
-        return groupes.map((g) => { const it = L.filter((i) => i.groupe === g); return `<div class="${CARD}"><div class="flex justify-between gap-2"><h4 class="font-titre text-sm text-foret">${E(g)}</h4><span class="font-bold text-sm">${it.length}</span></div><div class="divide-y divide-slate-100">` + it.map((i) => `<div class="py-2.5 space-y-1.5">${inp('invitations', i.id, 'nom', i.nom)}${inp('invitations', i.id, 'detail', i.detail, 'Détails (adresse, date d\'envoi…)')}<div class="flex justify-between gap-2"><button type="button" onclick="AD.set('invitations','${i.id}','statut','${i.statut === 'envoye' ? 'attente' : 'envoye'}')" class="${BT} border-2 ${ST[i.statut][1]}">${ST[i.statut][0]}</button>${dBtn('invitations', i.id)}</div></div>`).join('') + '</div></div>'; }).join('') || '<p class="text-sm text-slate-500">Aucun résultat.</p>';
+        const q = normaliserCle(F.iq), L = D.invitations.filter((i) => (F.ifl === 'tous' || i.statut === F.ifl) && (!q || normaliserCle(i.nom + ' ' + i.detail + ' ' + i.groupe).includes(q)));
+        return [...new Set(L.map((i) => i.groupe))].map((g) => { const it = L.filter((i) => i.groupe === g), p = g === G9;
+          return `<div class="rounded-2xl border-2 ${p ? 'border-amber-300 bg-white' : 'border-slate-200 bg-white'} p-4 sm:p-5"><div class="flex items-start justify-between gap-2 pb-2 mb-1 border-b ${p ? 'border-amber-200' : 'border-slate-100'}"><h4 class="font-titre text-base sm:text-lg ${p ? 'text-orFonce' : 'text-foret'}">${p ? '📌' : '📁'} ${E(g)}</h4><span class="rounded-full px-2.5 py-0.5 text-sm font-bold ${p ? 'bg-amber-100 text-orFonce' : 'bg-slate-100'}">${it.length}</span></div>`
+            + it.map((i) => `<div class="flex items-center gap-3 py-3.5 border-b border-slate-100 last:border-0"><div class="flex-1 min-w-0"><div class="text-lg font-bold text-anthracite">${ce('invitations', i.id, 'nom', i.nom, '', 'Nom')}</div><div class="text-base text-slate-600">${ce('invitations', i.id, 'detail', i.detail, '', 'Détails (adresse, date d\'envoi…)')}</div></div><button type="button" onclick="AD.cyc('${i.id}')" class="shrink-0 rounded-xl border-2 px-3 py-2 text-sm font-bold cursor-pointer ${PILL[i.statut]}">${PTXT[i.statut]}</button>${trash('invitations', i.id)}</div>`).join('') + '</div>'; }).join('') || '<p class="text-slate-500">Aucun résultat.</p>';
       }
       function vInv() {
-        const L = D.invitations, c = (s) => L.filter((i) => i.statut === s).length;
-        const gs = [...new Set(L.map((i) => i.groupe))];
-        return head('Suivi des invitations & courriers officiels', `${L.length} noms — ${c('envoye')} envoyé(s), ${c('attente')} en attente, ${c('a_traiter')} à traiter. Les noms de la billetterie sont ajoutés automatiquement, sans doublon.`)
-          + `<div class="${CARD}"><div class="grid grid-cols-1 sm:grid-cols-3 gap-2"><div class="sm:col-span-3">${fld('Rechercher', `<input type="text" value="${E(filtre)}" oninput="AD.filt(this.value)" placeholder="Nom, association, adresse…" class="${IN}" />`)}</div>
-          ${fld('Groupe', `<select id="ni-g" class="${IN}">${gs.map((g) => `<option>${E(g)}</option>`).join('')}</select>`)}${fld('Nom', `<input id="ni-n" type="text" class="${IN}" placeholder="Nom ou association" />`)}<div class="flex items-end"><button type="button" onclick="AD.ajouterInv()" class="btn-valider rounded-xl px-4 py-2 font-titre text-xs cursor-pointer w-full">+ Ajouter</button></div></div></div>`
+        const gs = [...new Set(D.invitations.map((i) => i.groupe))];
+        return ban('✉️', 'Suivi des invitations &amp; courriers officiels', `Touchez le statut d'une ligne pour valider son envoi pendant ou avant la réunion — ${D.invitations.length} noms (les noms de la billetterie sont ajoutés sans doublon)`, gold('AD.togAdd()', '+ Ajouter un invité / une lettre'))
+          + (addOpen ? card(`<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">${lab('Groupe', `<select id="ni-g" class="${IN}">${gs.map((g) => `<option>${E(g)}</option>`).join('')}</select>`)}${lab('Nom', `<input id="ni-n" type="text" class="${IN}" placeholder="Nom ou association" />`)}${lab('Détails', `<input id="ni-d" type="text" class="${IN}" placeholder="Adresse, contact…" />`)}</div><button type="button" onclick="AD.ajouterInv()" class="btn-valider rounded-xl px-6 py-3 mt-3 font-titre text-base cursor-pointer">Ajouter à la liste</button>`) : '')
+          + card(`<div class="flex flex-wrap gap-2 mb-3">${chips(F.ifl, [['tous', 'Tous'], ['attente', "⏳ En attente d'envoi"], ['envoye', '✅ Envoyé / Validé'], ['modifier', '✏️ À modifier'], ['a_traiter', 'À traiter']], 'fi')}</div><input type="search" value="${E(F.iq)}" oninput="AD.qinv(this.value)" placeholder="🔍 Rechercher un nom, une association…" class="${IN}" />`)
           + '<div id="inv-list" class="space-y-4">' + invList() + '</div>';
       }
+      const fi = (v) => { F.ifl = v; render(); };
+      const qinv = (v) => { F.iq = v; document.getElementById('inv-list').innerHTML = invList(); };
+      const togAdd = () => { addOpen = !addOpen; render(); };
+      const cyc = (id) => { const i = find('invitations', id); if (i) tog('invitations', id, 'statut', { attente: 'envoye', envoye: 'modifier', modifier: 'attente', a_traiter: 'attente' }[i.statut]); };
       function ajouterInv() {
-        const n = document.getElementById('ni-n').value.trim(), g = document.getElementById('ni-g').value;
-        if (!n) { afficherToast('Saisissez un nom.', 'error'); return; }
+        const n = document.getElementById('ni-n').value.trim(); if (!n) { afficherToast('Saisissez un nom.', 'error'); return; }
         if (D.invitations.some((i) => cle(i.nom) === cle(n))) { afficherToast('Ce nom existe déjà dans la liste.', 'error'); return; }
-        add('invitations', { nom: n, detail: '', groupe: g, statut: 'attente' });
+        add('invitations', { nom: n, detail: document.getElementById('ni-d').value.trim(), groupe: document.getElementById('ni-g').value, statut: 'attente' }); addOpen = false; render();
       }
-      function filt(v) { filtre = v; document.getElementById('inv-list').innerHTML = invList(); }
 
-      /* --- Commissions --- */
+      /* ---------- Commissions ---------- */
       function vCom() {
-        return head('Commissions de travail & rôles du bureau', 'Modifiez les responsables et les missions en direct.', addBtn('commissions', { titre: 'Nouvelle commission', resp: '', missions: '', statut: 'En cours' }, '+ Ajouter une commission'))
-          + '<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">' + D.commissions.map((x, i) => `<div class="${CARD}">${fld((i + 1) + '. Commission', inp('commissions', x.id, 'titre', x.titre))}${fld('Responsables', inp('commissions', x.id, 'resp', x.resp))}${fld('Missions / notes', `<textarea rows="3" onchange="AD.set('commissions','${x.id}','missions',this.value)" class="${IN}">${E(x.missions)}</textarea>`)}<div class="flex justify-between gap-2">${tog('commissions', x.id, x.statut, 'Validé', 'En cours')}${dBtn('commissions', x.id)}</div></div>`).join('') + '</div>';
+        return ban('👥', 'Commissions de travail &amp; rôles du bureau', 'Touchez les responsables ou missions pour modifier la répartition en direct', gold("AD.add('commissions',{titre:'Nouvelle commission',resp:'',missions:'',statut:'En cours'})", '+ Ajouter'))
+          + '<div class="grid grid-cols-1 lg:grid-cols-2 gap-4">' + D.commissions.map((x, i) => card(`<div class="flex items-start justify-between gap-2"><h4 class="font-titre text-lg"><span class="text-foret">${i + 1}.</span> ${ce('commissions', x.id, 'titre', x.titre, '', 'Commission')}</h4>${trash('commissions', x.id)}</div><div class="rounded-xl border border-slate-200 p-3 my-3"><div class="${LB} !text-foret">Responsables :</div><div class="text-base font-bold">${ce('commissions', x.id, 'resp', x.resp, '', 'Noms des responsables')}</div></div><div class="${LB}">Missions / notes :</div><div class="text-base text-slate-700 min-h-[3rem]">${ce('commissions', x.id, 'missions', x.missions, 'block', 'Missions…', 1)}</div><div class="flex items-center justify-between mt-3 pt-3 border-t border-slate-100"><span class="text-sm text-slate-600">Statut :</span><button type="button" onclick="AD.tog('commissions','${x.id}','statut','${x.statut === 'Validé' ? 'En cours' : 'Validé'}')" class="rounded-xl border-2 px-3 py-1.5 text-sm font-bold cursor-pointer ${x.statut === 'Validé' ? 'bg-emerald-50 text-foret border-emerald-400' : 'bg-amber-50 text-orFonce border-amber-400'}">${x.statut === 'Validé' ? 'Validé ✅' : 'En cours ⏳'}</button></div>`)).join('') + '</div>';
       }
 
-      /* --- Programme --- */
-      function vProg() {
-        return head('Programme de la journée culturelle (23 janvier 2027)', 'Horaires, séquences et intervenants — cochez les étapes réalisées.', addBtn('programme', { heure: '', titre: '', intervenant: '', fait: false }, '+ Ajouter une étape'))
-          + (D.programme.length ? D.programme.map((x) => `<div class="${CARD}"><div class="grid grid-cols-3 gap-2">${fld('Horaire', inp('programme', x.id, 'heure', x.heure, '14h00'))}<div class="col-span-2">${fld('Séquence', inp('programme', x.id, 'titre', x.titre))}</div></div>${fld('Intervenant', inp('programme', x.id, 'intervenant', x.intervenant))}<div class="flex justify-between gap-2"><button type="button" onclick="AD.set('programme','${x.id}','fait',${!x.fait})" class="${BT} border-2 ${x.fait ? 'bg-emerald-50 text-foret border-foret' : 'bg-white text-slate-600 border-slate-300'}">${x.fait ? 'Réalisé ✅' : 'À faire'}</button>${dBtn('programme', x.id)}</div></div>`).join('') : `<div class="${CARD} text-sm text-slate-500">Aucune étape pour le moment. Ajoutez vos horaires avec le bouton ci-dessus.</div>`);
+      /* ---------- Comptes rendus & bloc-notes ---------- */
+      function vCR() {
+        const c = (crId && find('comptes', crId)) || { date: today(), lieu: '', titre: '', texte: '' };
+        const b = (id, k, l, cl) => `<button type="button" onclick="AD.crOut('${id}','${k}')" class="rounded-xl border px-3 py-2 text-sm font-bold cursor-pointer ${cl}">${l}</button>`;
+        return ban('🗒️', 'Comptes rendus de réunion', 'Rédigez ou collez le texte, enregistrez-le, puis téléchargez-le en PDF / JPG ou envoyez-le par WhatsApp', `<div class="flex gap-2"><button type="button" onclick="AD.exportJson()" class="rounded-xl bg-white/90 text-anthracite text-sm font-bold px-3 py-2 cursor-pointer">💾 Sauvegarder (fichier)</button><label class="rounded-xl bg-white/90 text-anthracite text-sm font-bold px-3 py-2 cursor-pointer">📂 Restaurer<input type="file" accept=".json,application/json" class="hidden" onchange="AD.restaurer(this)" /></label></div>`)
+          + card(`<div class="grid grid-cols-2 gap-3">${lab('Date', `<input id="cr-d" type="date" value="${E(c.date)}" class="${IN}" />`)}${lab('Lieu', `<input id="cr-l" type="text" value="${E(c.lieu)}" class="${IN}" />`)}</div><div class="mt-3">${lab('Titre *', `<input id="cr-t" type="text" value="${E(c.titre)}" placeholder="Réunion de bureau du 21 novembre 2026" class="${IN}" />`)}</div><div class="mt-3">${lab('Texte du compte rendu — collez ici votre texte déjà écrit', `<textarea id="cr-x" rows="14" class="${IN} font-normal">${E(c.texte)}</textarea>`)}</div><div class="flex gap-2 mt-3"><button type="button" onclick="AD.crSave()" class="btn-valider rounded-xl px-6 py-3 font-titre text-base cursor-pointer">✅ Enregistrer le compte rendu</button>${crId ? `<button type="button" onclick="AD.crEdit(null)" class="rounded-xl border border-slate-300 px-4 py-3 text-sm font-bold cursor-pointer">Annuler</button>` : ''}</div>`)
+          + (D.comptes.length ? card(D.comptes.map((x) => `<div class="py-4 border-b border-slate-100 last:border-0"><div class="font-titre text-lg text-foret">${E(x.titre)}</div><div class="text-sm text-slate-600 mb-2">${E(dfr(x.date))}${x.lieu ? ' — ' + E(x.lieu) : ''}</div><div class="flex flex-wrap gap-2">${b(x.id, 'edit', '✏️ Modifier', 'bg-emerald-50 border-emerald-300')}${b(x.id, 'pdf', '📄 PDF', 'bg-amber-50 border-amber-300')}${b(x.id, 'jpg', '🖼️ JPG', 'bg-amber-50 border-amber-300')}${b(x.id, 'share', '📤 Partager PDF', 'bg-emerald-50 border-emerald-300')}${b(x.id, 'wa', '💬 WhatsApp', 'bg-emerald-50 border-emerald-300')}${trash('comptes', x.id)}</div></div>`).join('')) : '');
       }
-
-      /* --- Bloc-notes (place laissée vide) --- */
+      function crSave() {
+        const v = (i) => document.getElementById(i).value, t = v('cr-t').trim(); if (!t) { afficherToast('Le titre est obligatoire.', 'error'); return; }
+        const o = { date: v('cr-d'), lieu: v('cr-l').trim(), titre: t, texte: v('cr-x') };
+        if (crId && find('comptes', crId)) Object.assign(find('comptes', crId), o); else D.comptes.unshift({ id: uid(), ...o });
+        crId = null; save(); render(); afficherToast('Compte rendu enregistré.');
+      }
+      function crEdit(id) { crId = id; render(); window.scrollTo({ top: 0, behavior: 'smooth' }); }
+      async function crOut(id, k) {
+        const c = find('comptes', id); if (!c) return; if (k === 'edit') { crEdit(id); return; }
+        await sortie(k, 'Compte-rendu-' + (c.date || ''), c.titre, dfr(c.date) + (c.lieu ? ' — ' + c.lieu : ''), [{ h: '', lines: (c.texte || '').split('\n') }]);
+      }
       function vNot() {
-        return head('Bloc-notes de séance — réunion du samedi 21 novembre 2026', 'Collez ici votre compte rendu. Enregistrement automatique.')
-          + `<div class="${CARD}"><textarea rows="18" onchange="AD.note(this.value)" placeholder="Compte rendu de réunion — F.K.C.S. …" class="${IN}">${E(D.notes)}</textarea></div>`;
+        return ban('📝', 'Bloc-notes de séance — réunion du samedi 21 novembre 2026', 'Enregistrement automatique pendant que vous écrivez')
+          + card(`<textarea rows="20" oninput="AD.note(this.value)" placeholder="Écrivez ou collez vos notes ici…" class="${IN} font-normal">${E(D.notes)}</textarea>`);
       }
-      function note(v) { D.notes = v; save(); }
+      const note = (v) => { D.notes = v; save(); };
 
-      const VUES = { finances: ['Finances & reçus', vFin], presence: ['Présence', vPres], logistique: ['Logistique', vLog], invitations: ['Invitations', vInv], commissions: ['Commissions', vCom], programme: ['Programme', vProg], notes: ['Bloc-notes', vNot] };
-      function vue(v) { sub = v; render(); }
+      /* ---------- Affichage ---------- */
+      const VUES = { finances: ['💰', 'Finances & Reçus', vFin, 'bg-amber-50 border-amber-300 text-orFonce'], programme: ['📅', 'Programme de la Journée', vProg, 'bg-orange-50 border-orange-200 text-orange-800'], presence: ['📋', 'Liste de Présence', vPres, 'bg-emerald-50 border-emerald-300 text-foret'], logistique: ['🏛️', 'Logistique & Technique', vLog, 'bg-slate-100 border-slate-300 text-slate-700'], invitations: ['✉️', 'Invitations & Courriers', vInv, 'bg-slate-100 border-slate-300 text-slate-700'], commissions: ['👥', 'Commissions', vCom, 'bg-indigo-50 border-indigo-200 text-indigo-800'], comptes: ['🗒️', 'Comptes rendus', vCR, 'bg-slate-100 border-slate-300 text-slate-700'], notes: ['📝', 'Bloc-notes', vNot, 'bg-yellow-50 border-yellow-300 text-yellow-800'] };
+      const vue = (v) => { sub = v; render(); };
       function render() {
         const box = document.getElementById('admin-content'); if (!box || !D) return;
         statut();
-        document.getElementById('admin-nav').innerHTML = Object.entries(VUES).map(([k, [l]]) => `<button type="button" onclick="AD.vue('${k}')" class="${BT} ${k === sub ? 'bg-foret text-white' : 'bg-white border border-slate-300 text-anthracite'}">${l}</button>`).join('');
-        box.innerHTML = VUES[sub][1]();
+        document.getElementById('admin-nav').innerHTML = Object.entries(VUES).map(([k, [ic, l, , col]]) => `<button type="button" onclick="AD.vue('${k}')" class="shrink-0 rounded-xl border-2 px-4 py-2.5 text-sm sm:text-base font-titre cursor-pointer whitespace-nowrap ${col} ${k === sub ? 'ring-2 ring-foret bg-white' : ''}">${ic} ${l}</button>`).join('');
+        document.getElementById('admin-kpi').innerHTML = kpi();
+        box.innerHTML = VUES[sub][2]();
       }
-      function exportJson() {
-        const a = document.createElement('a');
-        a.href = URL.createObjectURL(new Blob([JSON.stringify(D, null, 1)], { type: 'application/json' }));
-        a.download = 'fkcs-admin-sauvegarde.json';
-        document.body.appendChild(a); a.click(); a.remove();
-      }
-      return { init, refresh, reset, set, add, del, recu, fermerRecu, imprimerRecu, filt, ajouterInv, note, vue, exportJson };
+      return { init, refresh, reset, upd, ced, tog, add, del, recu, rset, ract, completer, ffin, qfin, exportPdf, exportJson, restaurer, pAdd, pcat, qpres, csv, copier, fi, qinv, togAdd, cyc, ajouterInv, crSave, crEdit, crOut, note, vue };
     })();
 
     /* Branchement sur l'application existante */
     (() => {
-      const _co = changerOnglet, _oac = ouvrirApplicationConnectee, _rf = rafraichirInterfaceComplete, _dec = deconnecterUtilisateur;
+      const _co = changerOnglet, _rf = rafraichirInterfaceComplete, _dec = deconnecterUtilisateur;
       const CLS = 'tab-btn px-4 py-2.5 rounded-xl font-titre text-xs sm:text-sm cursor-pointer ';
       const OFF = 'bg-white text-anthracite border border-slate-200 hover:bg-creme', ON = 'bg-foret text-white shadow';
       changerOnglet = function (t) {
@@ -3344,14 +3487,11 @@
           ids.forEach((k) => { document.getElementById('tab-' + k).classList.add('hidden'); const b = document.getElementById('tab-btn-' + k); if (b) b.className = CLS + OFF; });
           document.getElementById('tab-admin').classList.remove('hidden');
           AD.init();
-        } else {
-          _co(t); document.getElementById('tab-admin').classList.add('hidden');
-        }
+        } else { _co(t); document.getElementById('tab-admin').classList.add('hidden'); }
         const ba = document.getElementById('tab-btn-admin');
         if (ba) ba.className = CLS + (activeTab === 'admin' ? ON : OFF) + (adm ? '' : ' hidden');
         ['vendeurs', 'invites'].forEach((k) => { const b = document.getElementById('tab-btn-' + k); if (b) b.classList.toggle('hidden', !adm); });
       };
-      ouvrirApplicationConnectee = function () { _oac(); };
       rafraichirInterfaceComplete = function () { _rf(); if (activeTab === 'admin') AD.refresh(); };
       deconnecterUtilisateur = function () { AD.reset(); activeTab = 'billetterie'; _dec(); };
     })();
