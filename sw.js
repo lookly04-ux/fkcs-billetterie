@@ -1,12 +1,12 @@
 /* Service worker F.K.C.S. : ouverture hors connexion + mises à jour automatiques */
-const VERSION = 'fkcs-billetterie-v1';
+const VERSION = 'fkcs-billetterie-v2';
 const COEUR = ['./', './index.html', './manifest.webmanifest', './icon-192.png', './icon-512.png', './icon-maskable-512.png', './apple-touch-icon.png'];
 const HOTES_CDN = /(^|\.)gstatic\.com$|^cdn\.tailwindcss\.com$|^fonts\.googleapis\.com$/;
 
 self.addEventListener('install', (e) => {
   e.waitUntil(
     caches.open(VERSION)
-      .then((c) => Promise.allSettled(COEUR.map((u) => c.add(u))))
+      .then((c) => Promise.allSettled(COEUR.map((u) => c.add(new Request(u, { cache: 'reload' })))))
       .then(() => self.skipWaiting())
   );
 });
@@ -25,9 +25,9 @@ self.addEventListener('fetch', (e) => {
   const url = new URL(req.url);
 
   if (url.origin === self.location.origin) {
-    // Nos fichiers : on prend la version en ligne, sinon celle gardée en mémoire
+    // Nos fichiers : toujours la version la plus récente en ligne (sans cache navigateur), sinon celle gardée en mémoire
     e.respondWith(
-      fetch(req)
+      fetch(req, { cache: 'no-cache' })
         .then((res) => {
           if (res && res.ok) { const copie = res.clone(); caches.open(VERSION).then((c) => c.put(req, copie)); }
           return res;
@@ -38,7 +38,6 @@ self.addEventListener('fetch', (e) => {
   }
 
   if (HOTES_CDN.test(url.hostname)) {
-    // Bibliothèques externes : gardées en mémoire pour fonctionner sans connexion
     e.respondWith(
       caches.open(VERSION).then((c) =>
         c.match(req).then((m) => {
